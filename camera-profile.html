@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — Camera Profile</title>
   <link rel="stylesheet" href="styles.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
+
 <body>
   <div class="app-layout">
     <!-- Sidebar Slot -->
@@ -31,36 +34,43 @@
 
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px;">
           <!-- Camera Info Card -->
-          <div class="card">
+          <div class="card" data-glare="false">
             <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:8px;">
               <span class="material-symbols-outlined" style="color:var(--primary);">videocam</span>
               Camera Information
             </h3>
-            
+
             <div style="display:flex; flex-direction:column; gap:16px;">
               <div>
-                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Camera Name</label>
-                <input type="text" id="cameraNameInput" value="Camera 1" style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;" />
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Camera
+                  Name</label>
+                <input type="text" id="cameraNameInput" value="Camera 1"
+                  style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;" />
               </div>
 
               <div>
-                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Camera ID</label>
-                <input type="text" id="cameraIdInput" value="CAM-001" style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;" />
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Camera
+                  ID</label>
+                <input type="text" id="cameraIdInput" value="CAM-001"
+                  style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;" />
               </div>
 
               <div>
                 <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Status</label>
                 <div style="display:flex; align-items:center; gap:8px;">
                   <span class="badge success">
-                    <span style="width:6px; height:6px; border-radius:50%; background:var(--success); display:inline-block;"></span>
+                    <span
+                      style="width:6px; height:6px; border-radius:50%; background:var(--success); display:inline-block;"></span>
                     Online
                   </span>
                 </div>
               </div>
 
               <div>
-                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Resolution</label>
-                <select id="resolutionSelect" style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;">
+                <label
+                  style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Resolution</label>
+                <select id="resolutionSelect"
+                  style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;">
                   <option value="720p">720p (1280×720)</option>
                   <option value="1080p" selected>1080p (1920×1080)</option>
                   <option value="4k">4K (3840×2160)</option>
@@ -70,34 +80,44 @@
           </div>
 
           <!-- Location Info Card -->
-          <div class="card">
+          <div class="card" data-glare="false">
             <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:8px;">
               <span class="material-symbols-outlined" style="color:var(--primary);">location_on</span>
               Location Details
             </h3>
-            
+
             <div style="display:flex; flex-direction:column; gap:16px;">
               <div>
-                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Address</label>
-                <div id="addressDisplay" style="padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px; min-height:42px;">
+                <label
+                  style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Address</label>
+                <div id="addressDisplay"
+                  style="padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px; min-height:42px;">
                   Click "Detect My Location" to get address
                 </div>
               </div>
 
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
                 <div>
-                  <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Latitude</label>
-                  <input type="text" id="latitudeInput" readonly style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;" placeholder="0.000000" />
+                  <label
+                    style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Latitude</label>
+                  <input type="text" id="latitudeInput" readonly
+                    style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;"
+                    placeholder="0.000000" />
                 </div>
                 <div>
-                  <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Longitude</label>
-                  <input type="text" id="longitudeInput" readonly style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;" placeholder="0.000000" />
+                  <label
+                    style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Longitude</label>
+                  <input type="text" id="longitudeInput" readonly
+                    style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;"
+                    placeholder="0.000000" />
                 </div>
               </div>
 
               <div>
-                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Accuracy</label>
-                <div id="accuracyDisplay" style="padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;">
+                <label
+                  style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Accuracy</label>
+                <div id="accuracyDisplay"
+                  style="padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;">
                   Not detected yet
                 </div>
               </div>
@@ -106,7 +126,7 @@
         </div>
 
         <!-- Map Card -->
-        <div class="card">
+        <div class="card" data-glare="false">
           <h3 style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
             <span class="material-symbols-outlined" style="color:var(--primary);">map</span>
             Camera Location Map
@@ -150,18 +170,18 @@
           document.getElementById('cameraNameInput').value = camera.name || 'Camera 1';
           document.getElementById('cameraIdInput').value = camera.id || 'CAM-001';
           document.getElementById('resolutionSelect').value = camera.resolution || '1080p';
-          
+
           if (camera.latitude && camera.longitude) {
             document.getElementById('latitudeInput').value = camera.latitude;
             document.getElementById('longitudeInput').value = camera.longitude;
             document.getElementById('addressDisplay').textContent = camera.address || 'Address not available';
             document.getElementById('accuracyDisplay').textContent = camera.accuracy || 'Unknown';
-            
+
             // Update map
             const lat = parseFloat(camera.latitude);
             const lng = parseFloat(camera.longitude);
             map.setView([lat, lng], 16);
-            
+
             if (marker) {
               marker.setLatLng([lat, lng]);
             } else {
@@ -202,7 +222,7 @@
 
           // Update map
           map.setView([lat, lng], 16);
-          
+
           if (marker) {
             marker.setLatLng([lat, lng]);
           } else {
@@ -253,13 +273,13 @@
       };
 
       localStorage.setItem('roadvision_camera', JSON.stringify(cameraData));
-      
+
       // Show success message
       const btn = document.getElementById('saveBtn');
       const originalHTML = btn.innerHTML;
       btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">check</span> Saved!';
       btn.style.background = 'var(--success)';
-      
+
       setTimeout(() => {
         btn.innerHTML = originalHTML;
         btn.style.background = '';
@@ -270,4 +290,5 @@
     window.addEventListener('load', loadCameraData);
   </script>
 </body>
+
 </html>
