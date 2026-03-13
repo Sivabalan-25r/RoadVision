@@ -259,14 +259,17 @@ def preprocess_for_crnn(plate_image: np.ndarray) -> Optional["torch.Tensor"]:
 
 def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Tuple[str, float]:
     """
-    Recognize text from a plate crop image.
+    Recognize text from a plate crop image using the optimal fallback chain.
 
-    Uses CRNN if trained weights are available (crnn.pth).
-    Falls back to PaddleOCR/Tesseract if CRNN is unavailable.
+    Fallback Chain:
+      1. CRNN (if weights available) - Best for speed/custom training
+      2. PaddleOCR - Best for general accuracy on Indian plates
+      3. EasyOCR - Good secondary deep learning option
+      4. Tesseract - Final fallback for simple text
 
     Args:
-        plate_image: BGR plate crop (for PaddleOCR).
-        preprocessed_image: Preprocessed grayscale plate (for Tesseract).
+        plate_image: BGR plate crop (best for DL models like Paddle/EasyOCR).
+        preprocessed_image: Preprocessed grayscale binary image (best for Tesseract).
 
     Returns:
         (recognized_text, confidence) tuple.
@@ -275,30 +278,35 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
     if plate_image is None or plate_image.size == 0:
         return "", 0.0
 
+    # 1. Try Custom CRNN if available
     model = _load_model()
-
-    # If CRNN is available, use it
     if model is not None:
         tensor = preprocess_for_crnn(plate_image)
-        if tensor is None:
-            return "", 0.0
+        if tensor is not None:
+            try:
+                with torch.no_grad():
+                    output = model(tensor)  # (1, seq_len, num_classes)
+                    text, confidence = _ctc_decode(output[0])
+                    if text and confidence >= 0.5:
+                        logger.info(f"CRNN SUCCESS: '{text}' (conf: {confidence:.2f})")
+                        return text, confidence
+            except Exception as e:
+                logger.error(f"CRNN recognition error: {e}")
 
-        try:
-            with torch.no_grad():
-                output = model(tensor)  # (1, seq_len, num_classes)
-                text, confidence = _ctc_decode(output[0])
-                return text, confidence
+    # 2. Try PaddleOCR (fallback 1) - Strongest for Indian plates
+    text, confidence = _paddleocr_recognize(plate_image)
+    if text and confidence >= 0.5:
+        return text, confidence
 
-        except Exception as e:
-            logger.error(f"CRNN recognition error: {e}")
-            return "", 0.0
+    # 3. Try EasyOCR (fallback 2)
+    text, confidence = _easyocr_recognize(plate_image)
+    if text and confidence >= 0.4:
+        return text, confidence
 
-    # Fallback: use EasyOCR/PaddleOCR/Tesseract
-    # Use preprocessed image for OCR if available
-    ocr_input = preprocessed_image if preprocessed_image is not None else plate_image
-    
-    # Try EasyOCR first (best for license plates)
-    return _easyocr_recognize(ocr_input)
+    # 4. Try Tesseract (final fallback)
+    # Use preprocessed (binary) image for Tesseract if provided
+    tess_input = preprocessed_image if preprocessed_image is not None else plate_image
+    return _tesseract_recognize(tess_input)
 
 
 # ---- PaddleOCR Fallback (replaces EasyOCR for better Indian plate accuracy) ----
@@ -497,8 +505,17 @@ def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         import pytesseract
         from PIL import Image
         
-        # Set Tesseract path for Windows
-        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        # Robust Tesseract path resolution for Windows
+        tess_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        if not os.path.exists(tess_path):
+            alt_path = r'C:\Users\Sivab\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
+            if os.path.exists(alt_path):
+                tess_path = alt_path
+        
+        if os.path.exists(tess_path):
+            pytesseract.pytesseract.tesseract_cmd = tess_path
+        else:
+            logger.warning(f"Tesseract executable not found at {tess_path}. Tesseract fallback will likely fail.")
         
         # Enhanced preprocessing for Tesseract
         if len(plate_image.shape) == 3:

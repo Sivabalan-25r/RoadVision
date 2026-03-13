@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13", // Electric Amber variant
+                        "danger": "#ef4444", // Danger Crimson
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#020617", // Slate-950
+                        "card-dark": "#0f172a", // Slate-900
+                        "border-dark": "#1e293b", // Slate-800
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "8px", "lg": "8px", "xl": "8px", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono-text { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(8px); }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-50 border-b border-slate-200 dark:border-border-dark bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md px-6 py-3">
+<div class="max-w-[1600px] mx-auto flex items-center justify-between">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="text-primary">
+<span class="material-symbols-outlined text-3xl">shield_with_heart</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold tracking-tight">Tactical Obsidian Pro</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-primary text-sm font-semibold" href="#">Live Feed</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium" href="#">Analytics</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium" href="#">Log Archive</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium" href="#">System Settings</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+<input class="bg-slate-100 dark:bg-card-dark border-slate-200 dark:border-border-dark rounded-lg pl-10 pr-4 py-2 text-sm w-64 focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Search plates, owners, or events..." type="text"/>
+</div>
+<button class="p-2 rounded-lg bg-slate-100 dark:bg-card-dark border border-slate-200 dark:border-border-dark relative">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-300">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-background-dark"></span>
+</button>
+<div class="h-8 w-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">person</span>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-[1600px] mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column: Live Camera Streams -->
+<div class="lg:col-span-3 flex flex-col gap-4">
+<div class="flex items-center justify-between mb-2">
+<h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Live Channels</h3>
+<span class="flex items-center gap-1.5 text-xs font-bold text-primary">
+<span class="w-2 h-2 bg-primary rounded-full animate-pulse"></span> LIVE
+                </span>
+</div>
+<div class="space-y-4">
+<!-- Camera 1 -->
+<div class="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-border-dark bg-card-dark">
+<div class="aspect-video relative">
+<img class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Security camera view of city intersection with car detection boxes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDahIbvXCR1-MNtvd2RA0xZg2pCnCn3ptjpe3j04lXImqvt-iCP6fEd-UnqBzYF5N_ipEpI1LqBJuOnkkd583EqKLcS2ryv_2yG_dUcVlY9H7qCBgRvppsHMPqug2cXt7CmK8-6ng1AIweusDZGrK1VU0Qz_QZ7vVBNAkVqlUqSmyMz9JaTE_EnkGcw0fjzHW7_wV5A8eOsY8uDZNjrR6whJrNtlz_Wk_OFbJYyO7ZvKNYbfemT_-ZVc12n9et6lblkNuXOHs8kThG5"/>
+<!-- YOLO Bounding Box Overlay -->
+<div class="absolute top-1/4 left-1/3 w-24 h-16 border-2 border-primary rounded-sm">
+<span class="absolute -top-5 left-0 bg-primary text-[10px] px-1 font-bold text-white uppercase">Vehicle 98%</span>
+</div>
+</div>
+<div class="p-3 bg-slate-100 dark:bg-card-dark flex justify-between items-center">
+<span class="text-xs font-semibold mono-text">CAM_01_NORTH_ENTRY</span>
+<span class="material-symbols-outlined text-sm text-slate-400">settings</span>
+</div>
+</div>
+<!-- Camera 2 -->
+<div class="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-border-dark bg-card-dark">
+<div class="aspect-video relative">
+<img class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Parking lot entrance surveillance footage" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYDMStg0whSeVG5Ik-CiUMRyWiWB4lDOCD0wWWYvLYODY9oZ8HxlYy9P6ZW33UKA1amaGhXxP-IiRcPgGi1dXPCIZUIHsarPkcx2WEcYnUOIOQyYMbLR1R5-NiheTr1OysX9q6Uw0D5aK3V5IBEo48V5Wt0FyHY6y7-wvgStFDNaFA-IUuHoKIBATOMGVuZKlJXMrCfBBDcGa1H5HwCUnNuRpffn6Plh51jlwpe0hQ8IAIlhIl3dZhfPQdubZV1OvT5cVA9zg8sUYO"/>
+</div>
+<div class="p-3 bg-slate-100 dark:bg-card-dark flex justify-between items-center">
+<span class="text-xs font-semibold mono-text">CAM_02_EXIT_SOUTH</span>
+<span class="material-symbols-outlined text-sm text-slate-400">settings</span>
+</div>
+</div>
+<!-- Camera 3 -->
+<div class="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-border-dark bg-card-dark">
+<div class="aspect-video relative">
+<img class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" data-alt="Highway overhead monitoring feed" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCd9KLQxBRP2FaTXZkr95Bmdju0jRIAM0E-LKXpODDS28sB9V6I7Gyh0LW_BkO-Nb3UB_rDq9JNRy6SHMk7-10Ior3QEKb3YvChGL39_ZMpygKnPqn4RCqFPNZqV8BOCYpmlyP7-oa3w0m3cAEfZlB8iHtDvDLmGpaCdUQPNVLeHwlSJu-NFTOobq1vFIql9wM3Rv7MyaqiTOymdiD0HsbXAipnD9Bb54dNB-2meMEnfcK1HDPCGdskaGMuI41dwXhXR1GKNcXWLC5d"/>
+</div>
+<div class="p-3 bg-slate-100 dark:bg-card-dark flex justify-between items-center">
+<span class="text-xs font-semibold mono-text">CAM_03_MAIN_HWY</span>
+<span class="material-symbols-outlined text-sm text-slate-400">settings</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Center Column: Active Reconstruction Panel -->
+<div class="lg:col-span-6 flex flex-col gap-6">
+<div class="bg-slate-100 dark:bg-card-dark rounded-lg border border-slate-200 dark:border-border-dark p-6">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h2 class="text-xl font-bold dark:text-white">Active Reconstruction</h2>
+<p class="text-sm text-slate-500 dark:text-slate-400">CRNN Deep Analysis Pipeline v4.2</p>
+</div>
+<div class="flex gap-2">
+<button class="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-4 py-2 rounded transition-colors uppercase tracking-wider">Validate Plate</button>
+<button class="bg-slate-200 dark:bg-border-dark text-slate-700 dark:text-slate-300 text-xs font-bold px-4 py-2 rounded transition-colors uppercase tracking-wider">Reject</button>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-6">
+<!-- Original Plate Crop -->
+<div class="space-y-3">
+<div class="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm">crop_free</span> Original Crop
+                        </div>
+<div class="aspect-[3/1] bg-black rounded-lg border border-border-dark flex items-center justify-center overflow-hidden p-2">
+<img class="w-full h-full object-contain filter grayscale contrast-125" data-alt="Close up crop of a blurred vehicle license plate" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvqMffdr1a-LAkG6w5_-9vgyUzDTQEYWFXiThNvuQSjFGN5dKl4FlNEdvCF7Gwf02XP60GSwOHUB25eOIEAhc4rU7IX3VSL9AGWm__YQzGiULaEEccdTOsdBLrPOxweu9EqHoRXN8Ur4F2p5xMmnqoHvN72tVVZYYhPa3Xry67fZK8dolJumIGHzSA6RIzHZskJdK0HgoQcFmBsc_l-ElIdXnFbX24AZxGmfiuZ_rkdJlVfjLV9x8rUwB1CXHh-Y_EX74qfAGho-nT"/>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[10px] mono-text text-slate-500">RES: 320x110px</span>
+<span class="text-[10px] mono-text text-slate-500">ISO: 400</span>
+</div>
+</div>
+<!-- CRNN Reconstructed -->
+<div class="space-y-3">
+<div class="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm">memory</span> AI Reconstructed
+                        </div>
+<div class="aspect-[3/1] bg-slate-900 rounded-lg border border-primary/30 flex flex-col items-center justify-center relative overflow-hidden group">
+<div class="text-4xl font-bold mono-text tracking-[0.2em] text-white">ABC 1234</div>
+<div class="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5"></div>
+<div class="absolute bottom-0 left-0 h-1 bg-primary w-full shadow-[0_0_10px_rgba(236,91,19,0.5)]"></div>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[10px] mono-text text-primary">MATCH FOUND (DB: #9041)</span>
+<span class="text-[10px] mono-text font-bold text-primary">CONF: 99.8%</span>
+</div>
+</div>
+</div>
+<!-- Confidence Heatmap Area -->
+<div class="mt-8">
+<h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-4">Spatial Confidence Heatmap</h3>
+<div class="h-24 w-full rounded-lg bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-border-dark overflow-hidden relative">
+<div class="absolute inset-0 flex">
+<!-- Simulated Heatmap bars -->
+<div class="h-full w-[12.5%] bg-primary opacity-20 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-40 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-60 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-80 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-100 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-90 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-70 border-r border-slate-800"></div>
+<div class="h-full w-[12.5%] bg-primary opacity-50"></div>
+</div>
+<div class="absolute inset-0 flex items-center justify-around pointer-events-none">
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">A</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">B</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">C</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">1</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">2</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">3</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">4</span>
+<span class="mono-text text-lg font-bold text-white drop-shadow-lg">X</span>
+</div>
+</div>
+<div class="mt-2 flex justify-between text-[10px] mono-text text-slate-500">
+<span>L-VECTOR: 0.941</span>
+<span>R-VECTOR: 0.982</span>
+<span>KERNEL: GAUSSIAN_X64</span>
+</div>
+</div>
+</div>
+<!-- Stats Bar -->
+<div class="grid grid-cols-3 gap-4">
+<div class="bg-card-dark border border-border-dark p-4 rounded-lg">
+<p class="text-[10px] font-bold text-slate-500 uppercase">Detection Rate</p>
+<p class="text-2xl font-bold text-white mono-text">14.2/s</p>
+</div>
+<div class="bg-card-dark border border-border-dark p-4 rounded-lg">
+<p class="text-[10px] font-bold text-slate-500 uppercase">Latency</p>
+<p class="text-2xl font-bold text-primary mono-text">42ms</p>
+</div>
+<div class="bg-card-dark border border-border-dark p-4 rounded-lg">
+<p class="text-[10px] font-bold text-slate-500 uppercase">Total Logged</p>
+<p class="text-2xl font-bold text-white mono-text">1.2M+</p>
+</div>
+</div>
+</div>
+<!-- Right Column: Violation Feed -->
+<div class="lg:col-span-3 flex flex-col gap-4 overflow-hidden max-h-[calc(100vh-120px)]">
+<h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Violation Watch</h3>
+<div class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+<!-- Alert 1: Blacklist -->
+<div class="bg-danger/10 border border-danger/30 p-4 rounded-lg relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-danger"></div>
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold text-danger uppercase mb-1 block tracking-tighter">🚨 Blacklist Alert</span>
+<p class="text-white font-bold mono-text text-lg">XYZ 9876</p>
+<p class="text-slate-400 text-xs mt-1">Stolen Vehicle - 2019 Toyota Rav4</p>
+</div>
+<span class="text-[10px] mono-text text-slate-500">12:44:02</span>
+</div>
+<div class="mt-3 flex gap-2">
+<button class="flex-1 py-1.5 text-[10px] font-bold bg-danger text-white rounded">POLICE DISPATCH</button>
+<button class="p-1.5 bg-slate-800 rounded">
+<span class="material-symbols-outlined text-sm text-white">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- Alert 2: Expired -->
+<div class="bg-card-dark border border-border-dark p-4 rounded-lg group">
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold text-amber-500 uppercase mb-1 block tracking-tighter">⚠️ Registration Expired</span>
+<p class="text-white font-bold mono-text text-lg">KLY 5521</p>
+<p class="text-slate-400 text-xs mt-1">2021 Ford F-150</p>
+</div>
+<span class="text-[10px] mono-text text-slate-500">12:42:15</span>
+</div>
+</div>
+<!-- Alert 3: Speeding -->
+<div class="bg-card-dark border border-border-dark p-4 rounded-lg group">
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold text-slate-500 uppercase mb-1 block tracking-tighter">⚡ Speed Violation</span>
+<p class="text-white font-bold mono-text text-lg">MNO 3310</p>
+<p class="text-slate-400 text-xs mt-1">82 MPH in 55 MPH zone</p>
+</div>
+<span class="text-[10px] mono-text text-slate-500">12:40:55</span>
+</div>
+</div>
+<!-- Alert 4: General Log -->
+<div class="bg-card-dark/50 border border-border-dark p-4 rounded-lg opacity-60">
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold text-slate-600 uppercase mb-1 block tracking-tighter">✓ Authorized Entry</span>
+<p class="text-slate-300 font-bold mono-text text-lg">STW 4402</p>
+<p class="text-slate-500 text-xs mt-1">Staff Access Point A</p>
+</div>
+<span class="text-[10px] mono-text text-slate-600">12:38:22</span>
+</div>
+</div>
+<!-- Alert 5: General Log -->
+<div class="bg-card-dark/50 border border-border-dark p-4 rounded-lg opacity-60">
+<div class="flex items-start justify-between">
+<div>
+<span class="text-[10px] font-bold text-slate-600 uppercase mb-1 block tracking-tighter">✓ Authorized Entry</span>
+<p class="text-slate-300 font-bold mono-text text-lg">JKY 1010</p>
+<p class="text-slate-500 text-xs mt-1">Delivery Bay 4</p>
+</div>
+<span class="text-[10px] mono-text text-slate-600">12:35:10</span>
+</div>
+</div>
+</div>
+<button class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg transition-colors border border-border-dark uppercase tracking-widest">
+                View Full Logs
+            </button>
+</div>
+</main>
+<!-- Footer Stats Overlay -->
+<footer class="fixed bottom-0 left-0 right-0 bg-slate-900/90 border-t border-border-dark py-2 px-6 backdrop-blur-sm">
+<div class="max-w-[1600px] mx-auto flex justify-between items-center">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+<span class="text-[10px] mono-text text-emerald-500">EDGE_NODE_04: ONLINE</span>
+</div>
+<div class="flex items-center gap-2 border-l border-slate-700 pl-6">
+<span class="text-[10px] mono-text text-slate-500 uppercase tracking-tighter">CPU LOAD</span>
+<div class="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/5"></div>
+</div>
+</div>
+<div class="flex items-center gap-2 border-l border-slate-700 pl-6">
+<span class="text-[10px] mono-text text-slate-500 uppercase tracking-tighter">GPU TEMP</span>
+<span class="text-[10px] mono-text text-white">48°C</span>
+</div>
+</div>
+<div class="text-[10px] mono-text text-slate-500">
+                SYSTEM EPOCH: 1715423891 • ENCRYPTION: AES-256-GCM
+            </div>
+</div>
+</footer>
+</body></html>

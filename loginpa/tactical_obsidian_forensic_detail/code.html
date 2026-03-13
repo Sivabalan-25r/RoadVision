@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tactical Obsidian Pro - Forensic ANPR</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;900&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13", // Electric Amber equivalent
+                        "danger": "#ef4444", // Danger Crimson
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#020617", // Slate-950
+                        "card-dark": "#0f172a", // Slate-900
+                        "border-dark": "#1e293b", // Slate-800
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(30, 41, 59, 0.5);
+        }
+        .mono-text { font-family: 'JetBrains Mono', monospace; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="layout-container flex h-full grow flex-col">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark px-6 py-3 bg-card-dark/50 backdrop-blur-md sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-primary">
+<div class="size-6">
+<span class="material-symbols-outlined text-3xl">shield_person</span>
+</div>
+<h2 class="text-slate-100 text-lg font-bold leading-tight tracking-tight uppercase">Tactical Obsidian Pro</h2>
+</div>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-slate-400 hover:text-primary text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-medium border-b-2 border-primary pb-1" href="#">Forensics</a>
+<a class="text-slate-400 hover:text-danger text-sm font-medium transition-colors flex items-center gap-1" href="#">
+                        Alerts <span class="size-2 bg-danger rounded-full inline-block animate-pulse"></span>
+</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<label class="hidden lg:flex flex-col min-w-64 !h-9">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full glass overflow-hidden">
+<div class="text-slate-400 flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 border-none bg-transparent focus:ring-0 text-sm placeholder:text-slate-500" placeholder="Search plates, dates, or IDs..."/>
+</div>
+</label>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-lg size-9 glass text-slate-300 hover:text-primary">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-lg size-9 glass text-slate-300 hover:text-primary">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="size-9 rounded-full border border-primary/50 bg-slate-800" data-alt="User profile avatar placeholder"></div>
+</div>
+</header>
+<main class="flex flex-1 overflow-hidden">
+<!-- Sidebar -->
+<aside class="w-64 border-r border-border-dark bg-card-dark/30 hidden xl:flex flex-col p-4 gap-6">
+<div>
+<h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Detection Node</h3>
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary border border-primary/20">
+<span class="material-symbols-outlined text-xl">biotech</span>
+<span class="text-sm font-semibold">Active Forensics</span>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-xl">videocam</span>
+<span class="text-sm">Live Feed</span>
+</div>
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-xl">database</span>
+<span class="text-sm">History Log</span>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Metadata</h3>
+<div class="space-y-3 px-3">
+<div class="flex flex-col">
+<span class="text-[10px] text-slate-500">STATION ID</span>
+<span class="text-xs mono-text text-slate-300">SEC-G-ST04-X9</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-slate-500">TIMESTAMP</span>
+<span class="text-xs mono-text text-slate-300">2023-10-27 14:22:09.432</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-slate-500">GPS COORDINATES</span>
+<span class="text-xs mono-text text-slate-300">40.7128° N, 74.0060° W</span>
+</div>
+</div>
+</div>
+<div class="mt-auto">
+<div class="p-3 rounded-lg bg-danger/5 border border-danger/20">
+<div class="flex items-center gap-2 text-danger mb-2">
+<span class="material-symbols-outlined text-sm">warning</span>
+<span class="text-[10px] font-bold uppercase">System Status</span>
+</div>
+<p class="text-[10px] text-slate-400">Heuristic Engine Load: 84%</p>
+<div class="w-full h-1 bg-slate-800 mt-2 rounded-full overflow-hidden">
+<div class="w-4/5 h-full bg-danger"></div>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+<!-- Header Actions -->
+<div class="flex items-center justify-between">
+<div>
+<h1 class="text-2xl font-black tracking-tight text-slate-100">Forensic Reconstruction Bridge</h1>
+<p class="text-slate-400 text-sm">Target ID: <span class="text-primary mono-text font-bold">TX-882-K9</span> | Confidence: 99.8%</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-lg text-sm font-bold border border-border-dark">
+<span class="material-symbols-outlined text-lg">file_download</span> Export Forensic Report
+                        </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-lg">flag</span> Flag Incident
+                        </button>
+</div>
+</div>
+<!-- Reconstruction Bridge Main Section -->
+<div class="grid grid-cols-1 gap-6">
+<div class="glass rounded-xl p-8 border border-border-dark flex flex-col gap-8">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+<!-- Raw Input -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">raw_on</span>
+                                        Original Physical Crop
+                                    </h3>
+<span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 mono-text">RAW_SENSOR_10bit</span>
+</div>
+<div class="aspect-[3/1] rounded-lg bg-black border border-slate-700 flex items-center justify-center overflow-hidden group relative">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<div class="w-full h-full bg-center bg-cover opacity-80 group-hover:scale-110 transition-transform duration-700" data-alt="Grainy low light car license plate close up" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCx6lpD18Po9v7g6vDMYapaoWhiPFZyT6w8ycIfriMM93l42JA-fHFFWv6VFNKlCnzIfXb-NXp5FeK4KzyaZfgYe--JJmqpPuB3pdF5-lPpnwJRI-oFz3U6n4tY_TUE8ltQHj75cHMqSA_-vLFzzxyp9yu96IRbyuKuIEroh2UwVaxY5e6N3bZn98M6266pBRpVrhAbqWd5y7wzadwtm6MzzdOUCWiA3w_K4i9OBNjh4TuDdy4QHG3qk9hPmsXcEUrTMv1PKuXE6uVb')"></div>
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-4/5 h-1/2 border-2 border-primary/40 rounded flex items-center justify-center">
+<div class="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-primary"></div>
+<div class="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-primary"></div>
+<div class="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-primary"></div>
+<div class="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-primary"></div>
+</div>
+</div>
+</div>
+<div class="flex justify-between text-[10px] mono-text text-slate-500">
+<span>Gain: +12dB</span>
+<span>Exposure: 1/2000s</span>
+<span>ISO: 3200</span>
+</div>
+</div>
+<!-- AI Reconstruction -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">auto_fix_high</span>
+                                        AI-Reconstructed Standard
+                                    </h3>
+<span class="text-[10px] px-2 py-0.5 rounded bg-primary/20 text-primary mono-text font-bold uppercase tracking-tighter">Model: JetBrains Mono-V4</span>
+</div>
+<div class="aspect-[3/1] rounded-lg bg-slate-100 border border-white/20 flex items-center justify-center relative overflow-hidden">
+<div class="absolute inset-0 opacity-5 pointer-events-none" style="background-image: radial-gradient(#000 1px, transparent 1px); background-size: 8px 8px;"></div>
+<span class="text-slate-950 font-black text-6xl md:text-8xl tracking-[0.2em] mono-text">TX-882-K9</span>
+</div>
+<div class="flex justify-between text-[10px] mono-text text-slate-500">
+<span>Sampling: 64x</span>
+<span>Denoise: Neural-L2</span>
+<span>Vector: SVG-Pathing</span>
+</div>
+</div>
+</div>
+<!-- Confidence Heatmap -->
+<div class="space-y-4">
+<h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">grid_view</span>
+                                Per-Character Confidence Heatmap
+                            </h3>
+<div class="grid grid-cols-8 gap-2">
+<!-- Character 1: T -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary/90 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">T</div>
+<div class="text-[10px] text-center text-slate-400">99.9%</div>
+</div>
+<!-- Character 2: X -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary/90 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">X</div>
+<div class="text-[10px] text-center text-slate-400">99.8%</div>
+</div>
+<!-- Spacer - -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary/40 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">-</div>
+<div class="text-[10px] text-center text-slate-400">Fixed</div>
+</div>
+<!-- Character 4: 8 -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary/80 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">8</div>
+<div class="text-[10px] text-center text-slate-400">98.2%</div>
+</div>
+<!-- Character 5: 8 -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary/70 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">8</div>
+<div class="text-[10px] text-center text-slate-400">97.4%</div>
+</div>
+<!-- Character 6: 2 -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">2</div>
+<div class="text-[10px] text-center text-slate-400">99.9%</div>
+</div>
+<!-- Spacer - -->
+<div class="flex flex-col gap-2">
+<div class="bg-primary/40 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl">-</div>
+<div class="text-[10px] text-center text-slate-400">Fixed</div>
+</div>
+<!-- Character 8: K9 -->
+<div class="flex flex-col gap-2">
+<div class="bg-danger/80 h-16 rounded flex items-center justify-center text-white mono-text font-bold text-2xl italic">K9</div>
+<div class="text-[10px] text-center text-danger font-bold">81.5%*</div>
+</div>
+</div>
+<p class="text-[10px] text-danger italic">* Lower confidence on "K9" due to physical plate distortion (bending). Heuristic verification suggests 92% probability of match with registered vehicle [FORD RAPTOR].</p>
+</div>
+</div>
+<!-- Bottom Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Secondary Video Feed -->
+<div class="glass rounded-xl p-4 border border-border-dark flex flex-col gap-3">
+<div class="flex items-center justify-between mb-2">
+<h3 class="text-xs font-bold text-slate-500 uppercase">Context Feed</h3>
+<span class="size-2 bg-primary rounded-full animate-pulse"></span>
+</div>
+<div class="aspect-video bg-black rounded-lg overflow-hidden relative" data-alt="Security camera footage of a parking entrance">
+<img alt="Context" class="w-full h-full object-cover opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuArAXhus5vzHLnPbP9ZrjZTgIAqhusisSSQ5822I21CQIphUgR3fEPtpcrbQIxoCSLlTiCFAOzmpwH6z0B6v1uGwx1P-t6rd0bYTQ7Xf7dQLY-TDg5PLNTZIAQC9YscgSgloOeE-PgM44hnALcy_C1LMPRqb9YwxJuOwxcAR3ed_lizDW_5vhnTovzpdskDVrDRCWvMlPk149sbjpPuGsQtOrwGJtTotd9lnyd0_9fAJmLJcrYVVrsKOX_Lf9Rt0zVnr_fgg-wLQk1c"/>
+<div class="absolute inset-0 border border-primary/20 pointer-events-none"></div>
+<div class="absolute top-2 left-2 flex items-center gap-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white mono-text">
+<span class="material-symbols-outlined text-[10px]">sensors</span> CAM-04_WIDE
+                                </div>
+</div>
+<p class="text-[10px] text-slate-500">Wide angle perspective for vehicle color/make verification.</p>
+</div>
+<!-- Database Match -->
+<div class="glass rounded-xl p-4 border border-border-dark flex flex-col gap-4">
+<h3 class="text-xs font-bold text-slate-500 uppercase">Registered Match</h3>
+<div class="flex gap-4">
+<div class="size-16 rounded-lg bg-slate-800 flex-shrink-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl text-slate-600">directions_car</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-sm font-bold text-slate-100">Ford Raptor (2022)</span>
+<span class="text-xs text-slate-400">Color: Agate Black Metallic</span>
+<span class="text-xs text-slate-400">Owner: James T. Miller</span>
+</div>
+</div>
+<div class="mt-auto pt-4 border-t border-border-dark flex justify-between">
+<span class="text-[10px] text-slate-500">REGISTRATION STATUS</span>
+<span class="text-[10px] font-bold text-green-500 uppercase">Active / Clear</span>
+</div>
+</div>
+<!-- Alert History -->
+<div class="glass rounded-xl p-4 border border-border-dark flex flex-col gap-3">
+<h3 class="text-xs font-bold text-slate-500 uppercase">Recent Station Alerts</h3>
+<div class="space-y-2">
+<div class="flex items-center gap-3 p-2 rounded bg-danger/10 border border-danger/20">
+<span class="material-symbols-outlined text-danger text-sm">warning</span>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-200">BOLO: SUSPICIOUS VEHICLE</span>
+<span class="text-[8px] text-slate-500 mono-text">14:18:22 • G-Sector</span>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 rounded bg-primary/10 border border-primary/20">
+<span class="material-symbols-outlined text-primary text-sm">speed</span>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-200">SPEED VIOLATION: 82MPH</span>
+<span class="text-[8px] text-slate-500 mono-text">14:12:05 • F-Sector</span>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 rounded bg-slate-800 border border-border-dark">
+<span class="material-symbols-outlined text-slate-400 text-sm">check_circle</span>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-slate-400">CLEARANCE GRANTED: STAFF</span>
+<span class="text-[8px] text-slate-500 mono-text">13:58:10 • Gate 2</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -64,6 +64,8 @@ def load_plate_model():
         return _plate_model
 
     from ultralytics import YOLO
+    import torch
+    import functools
 
     if not os.path.exists(PLATE_MODEL_PATH):
         raise FileNotFoundError(
@@ -73,7 +75,16 @@ def load_plate_model():
         )
 
     logger.info(f"Loading YOLOv8 plate detector: {PLATE_MODEL_PATH}")
-    _plate_model = YOLO(PLATE_MODEL_PATH)
+    
+    # PyTorch 2.6+ defaults to weights_only=True which breaks older YOLO models.
+    # Temporarily patch torch.load to use weights_only=False for model loading.
+    _original_torch_load = torch.load
+    torch.load = functools.partial(_original_torch_load, weights_only=False)
+    try:
+        _plate_model = YOLO(PLATE_MODEL_PATH)
+    finally:
+        torch.load = _original_torch_load
+    
     logger.info("YOLOv8 plate detector loaded successfully.")
     return _plate_model
 

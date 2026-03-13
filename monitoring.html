@@ -34,8 +34,9 @@
         </div>
 
         <!-- Video Feed Viewer -->
-        <div class="frame-viewer" id="monitorViewer" style="margin-bottom:32px;">
-          <img src="assets/images/traffic-frame.jpg" alt="Live traffic camera feed — Main Expressway" />
+        <div class="frame-viewer" id="monitorViewer" data-glare="false" style="margin-bottom:32px;">
+          <img id="staticImage" src="assets/images/traffic-frame.jpg" alt="Live traffic camera feed — Main Expressway" />
+          <video id="webcamVideo" autoplay playsinline style="display:none; width:100%; height:100%; object-fit:cover;"></video>
 
           <!-- Canvas Overlay for Dynamic Bounding Boxes -->
           <canvas id="bboxCanvas"
@@ -211,7 +212,6 @@
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('load', () => {
       resizeCanvas();
-      fetchMockDetections();
     });
 
     // ---- Webcam Control ----

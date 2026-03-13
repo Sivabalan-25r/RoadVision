@@ -81,8 +81,10 @@ input { font-family: inherit; }
 .sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
+  background: rgba(11, 18, 32, 0.3);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -146,7 +148,7 @@ input { font-family: inherit; }
 }
 
 .sidebar-nav a.active {
-  background: var(--primary-glow);
+  background: rgba(37, 99, 235, 0.2);
   color: var(--primary);
   font-weight: 600;
 }
@@ -178,6 +180,29 @@ input { font-family: inherit; }
 
 .sidebar-footer .upgrade-btn:hover {
   background: var(--primary-hover);
+}
+
+.sidebar-logout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all .2s ease;
+  width: 100%;
+}
+
+.sidebar-logout:hover {
+  background: rgba(239,68,68,.1);
+  color: var(--alert);
+}
+
+.sidebar-logout .nav-icon {
+  font-size: 22px;
+  line-height: 1;
 }
 
 /* ---------- Main Area ---------- */
@@ -250,6 +275,26 @@ input { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.header-logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  transition: all .2s ease;
+}
+
+.header-logout-btn:hover {
+  background: rgba(239,68,68,.1);
+  color: var(--alert);
+}
+
+.header-logout-btn .material-symbols-outlined {
+  font-size: 20px;
 }
 
 .btn-outline {
@@ -1028,9 +1073,6 @@ input { font-family: inherit; }
   flex-shrink: 0;
 }
 
-<<<<<<< HEAD
-
-=======
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -1160,5 +1202,5 @@ input { font-family: inherit; }
   height: 100%;
   object-fit: cover;
 }
->>>>>>> fb8299639ce0362a1df4afd5f37ebca61e840d55
+
 

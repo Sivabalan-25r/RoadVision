@@ -65,7 +65,7 @@
         </div>
 
         <!-- Upload Zone (visible before upload) -->
-        <div class="upload-zone" id="uploadZone">
+        <div class="upload-zone" id="uploadZone" data-glare="false">
           <div class="upload-zone-inner">
             <span class="material-symbols-outlined upload-icon">cloud_upload</span>
             <p class="upload-title">Drag & drop your traffic video here</p>
@@ -86,7 +86,7 @@
 
         <!-- Video Preview (visible after upload) -->
         <div class="video-preview-section" id="videoPreview" style="display:none;">
-          <div class="frame-viewer" style="margin-bottom:16px;">
+          <div class="frame-viewer" style="margin-bottom:16px;" data-glare="false">
             <video id="videoPlayer" controls style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
             <!-- Bounding box overlay for violations -->
             <div class="bbox suspicious" id="violationBbox" style="display:none; top:35%; left:40%; width:20%; height:12%;">
@@ -172,10 +172,7 @@
   </div>
 
   <script src="components/loader.js"></script>
-<<<<<<< HEAD
-=======
   <script src="components/evidence-store.js"></script>
->>>>>>> fb8299639ce0362a1df4afd5f37ebca61e840d55
   <script src="components/glare-hover.js"></script>
   <script>
     // ============ Video Upload Logic ============
@@ -566,9 +563,6 @@
       if (e.target === evidenceModal) evidenceModal.classList.remove('active');
     });
   </script>
-<<<<<<< HEAD
-=======
 
->>>>>>> fb8299639ce0362a1df4afd5f37ebca61e840d55
 </body>
 </html>
