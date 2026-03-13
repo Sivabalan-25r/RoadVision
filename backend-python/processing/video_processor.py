@@ -19,14 +19,14 @@ logger = logging.getLogger(__name__)
 
 def process_video(
     video_path: str,
-    frame_interval: int = 20,
+    frame_interval: int = 5,
 ) -> List[dict]:
     """
     Process a video file: extract frames, detect plates, return raw detections.
 
     Args:
         video_path: Path to the video file.
-        frame_interval: Analyze every Nth frame (default 20).
+        frame_interval: Analyze every Nth frame (default 5).
 
     Returns:
         List of dicts with 'bbox', 'crop', 'raw_crop', 'confidence', 'frame_number'

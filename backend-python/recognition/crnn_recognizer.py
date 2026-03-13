@@ -261,7 +261,7 @@ def recognize_plate(plate_image: np.ndarray) -> Tuple[str, float]:
     Recognize text from a preprocessed plate crop image.
 
     Uses CRNN if trained weights are available (crnn.pth).
-    Falls back to EasyOCR if CRNN is unavailable.
+    Falls back to PaddleOCR if CRNN is unavailable.
 
     Args:
         plate_image: BGR or grayscale numpy array of the plate crop.
@@ -292,7 +292,13 @@ def recognize_plate(plate_image: np.ndarray) -> Tuple[str, float]:
             return "", 0.0
 
     # Fallback: use PaddleOCR when CRNN weights are not available
-    return _paddleocr_recognize(plate_image)
+    # PaddleOCR needs BGR/RGB images, convert grayscale to BGR if needed
+    if len(plate_image.shape) == 2:
+        plate_image_bgr = cv2.cvtColor(plate_image, cv2.COLOR_GRAY2BGR)
+    else:
+        plate_image_bgr = plate_image
+    
+    return _paddleocr_recognize(plate_image_bgr)
 
 
 # ---- PaddleOCR Fallback (replaces EasyOCR for better Indian plate accuracy) ----
@@ -310,11 +316,10 @@ def _get_paddle_reader():
         try:
             from paddleocr import PaddleOCR
             logger.info("Initializing PaddleOCR reader (CRNN fallback)...")
+            # Use minimal parameters for compatibility
             _paddle_reader = PaddleOCR(
                 lang='en',
                 use_angle_cls=True,
-                use_gpu=False,
-                show_log=False,
             )
             logger.info("PaddleOCR reader ready.")
         except ImportError:
@@ -322,6 +327,9 @@ def _get_paddle_reader():
                 "Neither CRNN weights nor PaddleOCR are available. "
                 "Install paddleocr: pip install paddlepaddle paddleocr"
             )
+            return None
+        except Exception as e:
+            logger.error(f"Failed to initialize PaddleOCR: {e}", exc_info=True)
             return None
     return _paddle_reader
 
@@ -339,29 +347,51 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return "", 0.0
 
     try:
-        results = reader.ocr(plate_image, cls=True)
+        # Call OCR without cls parameter for compatibility
+        results = reader.ocr(plate_image)
 
         if not results or not results[0]:
+            logger.debug("PaddleOCR returned empty results")
             return "", 0.0
 
-        # PaddleOCR returns: [[[box], (text, confidence)], ...]
+        # The installed version might return Paddlex dict format or standard list format
         texts = []
         confidences = []
-        for line in results[0]:
-            if line and len(line) >= 2:
-                text, conf = line[1]
-                if conf >= 0.3:
+        
+        # Handle PaddleX dict format
+        if isinstance(results[0], dict) and 'rec_texts' in results[0]:
+            rec_texts = results[0].get('rec_texts', [])
+            rec_scores = results[0].get('rec_scores', [])
+            for text, conf in zip(rec_texts, rec_scores):
+                if conf >= 0.5:
                     texts.append(text)
                     confidences.append(conf)
+        # Handle standard PaddleOCR format: [[[box], (text, conf)], ...]
+        elif isinstance(results[0], list):
+            for line in results[0]:
+                if line and len(line) >= 2:
+                    # line format: [box_coords, (text, confidence)]
+                    if isinstance(line[1], tuple) and len(line[1]) >= 2:
+                        text, conf = line[1][0], line[1][1]
+                        if conf >= 0.5:
+                            texts.append(str(text))
+                            confidences.append(float(conf))
+                    elif isinstance(line[1], list) and len(line[1]) >= 2:
+                        text, conf = line[1][0], line[1][1]
+                        if conf >= 0.5:
+                            texts.append(str(text))
+                            confidences.append(float(conf))
 
         if not texts:
+            logger.debug("PaddleOCR: No text with sufficient confidence")
             return "", 0.0
 
         combined_text = ''.join(texts).strip().upper()
         avg_conf = sum(confidences) / len(confidences)
+        logger.info(f"PaddleOCR SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
         return combined_text, avg_conf
 
     except Exception as e:
-        logger.error(f"PaddleOCR recognition error: {e}")
+        logger.error(f"PaddleOCR recognition error: {e}", exc_info=True)
         return "", 0.0
 
