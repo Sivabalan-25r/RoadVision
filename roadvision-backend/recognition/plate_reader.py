@@ -42,6 +42,23 @@ OCR_CORRECTIONS = {
     ']': 'J',   # Bracket misread as J
 }
 
+# Uppercase ambiguous character map (applied AFTER uppercasing).
+# Used by normalize_plate() as a lighter standalone normalizer.
+CHAR_NORMALIZE_MAP = {
+    'I': '1',
+    'O': '0',
+    'B': '8',
+    'S': '5',
+    'Z': '2',
+}
+
+# Known false-positive strings that OCR frequently produces from
+# non-plate regions (sign text, headers, stickers, etc.)
+KNOWN_FALSE_POSITIVES = {
+    'IND', 'INDIA', 'TEST', 'SAMPLE', 'DEMO',
+    'GOVT', 'POLICE', 'TAXI', 'AUTO',
+}
+
 
 def _get_reader():
     """Lazy initialize EasyOCR reader (downloads model on first run)."""
@@ -101,6 +118,10 @@ def is_garbage_text(text: str) -> bool:
     if len(text) > MAX_CLEANED_LENGTH:
         return True
 
+    # Known false-positive words from signs, stickers, headers
+    if text in KNOWN_FALSE_POSITIVES:
+        return True
+
     # All same character (e.g., "0000", "AAAA", "1111")
     if len(set(text)) <= 1:
         return True
@@ -134,7 +155,28 @@ def is_garbage_text(text: str) -> bool:
     if letter_count < 2 or digit_count < 2:
         return True
 
+    # Consecutive identical pairs (e.g., "AABB1122")
+    if len(text) >= 8:
+        pairs = [text[j:j+2] for j in range(0, len(text) - 1, 2)]
+        if all(p[0] == p[1] for p in pairs if len(p) == 2):
+            return True
+
     return False
+
+
+def normalize_plate(text: str) -> str:
+    """
+    Normalize plate text by cleaning whitespace, punctuation, and
+    non-alphanumeric characters.
+
+    This is a lightweight cleaner for deduplication. Context-aware
+    character corrections (I→1, O→0, etc.) are handled by
+    plate_rules.smart_normalize() which knows digit vs letter positions.
+    """
+    text = text.upper().strip()
+    text = re.sub(r'[\s\-\.\,]+', '', text)
+    text = re.sub(r'[^A-Z0-9]', '', text)
+    return text
 
 
 def is_valid_crop_size(plate_image: np.ndarray) -> bool:

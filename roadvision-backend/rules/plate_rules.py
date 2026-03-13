@@ -95,8 +95,17 @@ class PlateValidationResult:
 
 
 def normalize_plate(text: str) -> str:
-    """Remove spaces, hyphens, dots and convert to uppercase."""
-    return re.sub(r'[\s\-\.\,]+', '', text.upper().strip())
+    """
+    Clean plate text: remove spaces, hyphens, dots, commas, and
+    non-alphanumeric characters, then convert to uppercase.
+
+    This is a lightweight normalizer used for deduplication and quick
+    comparisons. It does NOT apply character substitutions — those are
+    handled by smart_normalize() which is position-aware.
+    """
+    text = re.sub(r'[\s\-\.\,]+', '', text.upper().strip())
+    text = re.sub(r'[^A-Z0-9]', '', text)
+    return text
 
 
 def smart_normalize(plate: str) -> tuple:
@@ -229,14 +238,21 @@ def check_tampered_plate(plate: str) -> Optional[PlateValidationResult]:
     Signs of tampering:
       - Mix of manipulation types in one plate
       - Characters that are ambiguous across multiple substitutions
+      - 2+ corrections needed when the state code is also invalid
     """
     if len(plate) < 8:
         return None
 
     corrected_plate, corrections = smart_normalize(plate)
 
-    # If there are 3+ character corrections needed, it's likely tampered
-    if len(corrections) >= 3:
+    # Lower threshold when the state code is not a valid Indian state,
+    # since an invalid state + corrections is a strong tampering signal.
+    threshold = 3
+    state = corrected_plate[:2] if len(corrected_plate) >= 2 else ''
+    if state not in VALID_STATE_CODES:
+        threshold = 2
+
+    if len(corrections) >= threshold:
         return PlateValidationResult(
             detected_plate=plate,
             correct_plate=corrected_plate,
@@ -260,7 +276,7 @@ def check_pattern_mismatch(plate: str) -> Optional[PlateValidationResult]:
                 detected_plate=plate,
                 correct_plate=plate,
                 violation="Invalid State Code",
-                confidence_modifier=0.85,
+                confidence_modifier=0.7,
             )
         return None  # Valid plate
 

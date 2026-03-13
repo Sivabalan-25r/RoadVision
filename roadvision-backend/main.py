@@ -115,7 +115,7 @@ async def analyze_video(video: UploadFile = File(...)):
                 continue
 
             normalized = normalize_plate(plate_text)
-            if len(normalized) < 4:
+            if len(normalized) < 6:
                 continue
 
             # Deduplicate: skip if we've already seen this plate
