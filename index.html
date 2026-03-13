@@ -106,6 +106,19 @@
             </div>
           </div>
 
+          <!-- Timeline Scrubber -->
+          <div class="timeline-scrubber" id="timelineScrubber">
+            <div class="timeline-track" id="timelineTrack">
+              <div class="timeline-progress" id="timelineProgress"></div>
+              <div class="timeline-playhead" id="timelinePlayhead"></div>
+              <div class="timeline-markers" id="timelineMarkers"></div>
+            </div>
+            <div class="timeline-time">
+              <span id="timelineCurrent">0:00</span>
+              <span id="timelineDuration">0:00</span>
+            </div>
+          </div>
+
           <!-- File Info & Actions -->
           <div class="video-actions">
             <div class="video-file-info">
@@ -156,7 +169,19 @@
     </div>
   </div>
 
+  <!-- Evidence Modal -->
+  <div class="evidence-modal" id="evidenceModal">
+    <div class="evidence-modal-content">
+      <button class="evidence-modal-close" id="evidenceModalClose">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+      <img id="evidenceModalImg" src="" alt="Evidence frame" />
+      <div class="evidence-modal-details" id="evidenceModalDetails"></div>
+    </div>
+  </div>
+
   <script src="components/loader.js"></script>
+  <script src="components/evidence-store.js"></script>
   <script>
     // ============ Video Upload Logic ============
     const uploadZone = document.getElementById('uploadZone');
@@ -369,15 +394,28 @@
       // Render bounding boxes on video
       renderBoundingBoxes(results);
 
+      // Capture evidence frames for each violation
+      results.forEach((r) => {
+        if (r.violation) {
+          const evidenceDataUrl = captureEvidenceFrame(videoPlayer, r);
+          saveEvidence(r, evidenceDataUrl);
+          r._evidenceImage = evidenceDataUrl;
+        }
+      });
+
       results.forEach((r) => {
         const conf = Math.round(r.confidence * 100);
         const confColor = conf >= 90 ? 'var(--success)' : 'var(--warning)';
         const card = document.createElement('div');
         card.className = 'detection-card';
+
+        const imgSrc = r._evidenceImage || '';
+        const imgSection = imgSrc
+          ? `<div class="detection-card-img" style="padding:0; overflow:hidden;"><img src="${imgSrc}" alt="Evidence: ${r.detected_plate}" style="width:100%; height:100%; object-fit:cover;" /></div>`
+          : `<div class="detection-card-img" style="background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; letter-spacing:3px; color:#111; font-family:'Courier New',monospace; border-bottom:1px solid var(--border-color);">${r.detected_plate}</div>`;
+
         card.innerHTML = `
-          <div class="detection-card-img" style="background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; letter-spacing:3px; color:#111; font-family:'Courier New',monospace; border-bottom:1px solid var(--border-color);">
-            ${r.detected_plate}
-          </div>
+          ${imgSection}
           <div class="detection-card-body">
             <div class="detection-row">
               <span class="detection-label">Detected Plate</span>
@@ -396,6 +434,7 @@
               <span class="detection-value" style="color:${confColor}; font-weight:600;">${conf}%</span>
             </div>
             ${r.frame ? `<div class="detection-row"><span class="detection-label">Frame</span><span class="detection-value">#${r.frame}</span></div>` : ''}
+            ${imgSrc ? `<button class="btn-evidence" onclick="openEvidenceModal('${imgSrc.replace(/'/g, "\\'") }', '${r.detected_plate}', '${r.correct_plate}', '${r.violation}', ${conf})"><span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence</button>` : ''}
           </div>
         `;
         resultsGrid.appendChild(card);
@@ -403,7 +442,134 @@
 
       // Scroll to results
       detectionResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Render detection markers on timeline
+      renderTimelineMarkers(results);
     }
+
+    // ============ Timeline Scrubber ============
+    const timelineTrack = document.getElementById('timelineTrack');
+    const timelineProgress = document.getElementById('timelineProgress');
+    const timelinePlayhead = document.getElementById('timelinePlayhead');
+    const timelineMarkers = document.getElementById('timelineMarkers');
+    const timelineCurrent = document.getElementById('timelineCurrent');
+    const timelineDuration = document.getElementById('timelineDuration');
+
+    const FPS = 30; // assumed frame rate for frame-to-time conversion
+    let currentResults = [];
+
+    // Format seconds to m:ss
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    // Update timeline on video time change
+    videoPlayer.addEventListener('loadedmetadata', () => {
+      timelineDuration.textContent = formatTime(videoPlayer.duration);
+    });
+
+    videoPlayer.addEventListener('timeupdate', () => {
+      if (!videoPlayer.duration) return;
+      const pct = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+      timelineProgress.style.width = pct + '%';
+      timelinePlayhead.style.left = pct + '%';
+      timelineCurrent.textContent = formatTime(videoPlayer.currentTime);
+
+      // Highlight markers near current time
+      highlightNearbyMarkers(videoPlayer.currentTime);
+    });
+
+    // Click on timeline track to seek
+    timelineTrack.addEventListener('click', (e) => {
+      if (!videoPlayer.duration) return;
+      const rect = timelineTrack.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      videoPlayer.currentTime = pct * videoPlayer.duration;
+    });
+
+    // Render detection markers on the timeline
+    function renderTimelineMarkers(results) {
+      timelineMarkers.innerHTML = '';
+      currentResults = results;
+
+      if (!videoPlayer.duration) return;
+
+      results.forEach((r, idx) => {
+        if (!r.frame) return;
+        const timeSec = r.frame / FPS;
+        const pct = (timeSec / videoPlayer.duration) * 100;
+        if (pct > 100) return;
+
+        const marker = document.createElement('div');
+        marker.className = 'timeline-marker';
+        marker.style.left = pct + '%';
+        marker.dataset.index = idx;
+
+        // Tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'timeline-marker-tooltip';
+        tooltip.innerHTML = `<strong>${r.detected_plate}</strong><br>${r.violation}`;
+        marker.appendChild(tooltip);
+
+        // Click to jump
+        marker.addEventListener('click', (e) => {
+          e.stopPropagation();
+          videoPlayer.currentTime = timeSec;
+          videoPlayer.pause();
+          // Scroll to the corresponding detection card
+          const cards = resultsGrid.querySelectorAll('.detection-card');
+          if (cards[idx]) {
+            cards[idx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            cards[idx].style.outline = '2px solid var(--alert)';
+            setTimeout(() => { cards[idx].style.outline = ''; }, 2000);
+          }
+        });
+
+        timelineMarkers.appendChild(marker);
+      });
+    }
+
+    // Highlight markers near the playhead
+    function highlightNearbyMarkers(currentTime) {
+      const markers = timelineMarkers.querySelectorAll('.timeline-marker');
+      markers.forEach((marker, idx) => {
+        const r = currentResults[marker.dataset.index];
+        if (!r || !r.frame) return;
+        const markerTime = r.frame / FPS;
+        const diff = Math.abs(currentTime - markerTime);
+        if (diff < 0.5) {
+          marker.classList.add('active');
+        } else {
+          marker.classList.remove('active');
+        }
+      });
+    }
+
+    // ============ Evidence Modal ============
+    const evidenceModal = document.getElementById('evidenceModal');
+    const evidenceModalImg = document.getElementById('evidenceModalImg');
+    const evidenceModalDetails = document.getElementById('evidenceModalDetails');
+    const evidenceModalClose = document.getElementById('evidenceModalClose');
+
+    function openEvidenceModal(imgSrc, plate, corrected, violation, confidence) {
+      evidenceModalImg.src = imgSrc;
+      evidenceModalDetails.innerHTML = `
+        <div class="detection-row"><span class="detection-label">Detected Plate</span><span class="plate-number">${plate}</span></div>
+        <div class="detection-row"><span class="detection-label">Correct Plate</span><span class="detection-value">${corrected}</span></div>
+        <div class="detection-row"><span class="detection-label">Violation</span><span class="badge alert">${violation}</span></div>
+        <div class="detection-row"><span class="detection-label">Confidence</span><span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span></div>
+      `;
+      evidenceModal.classList.add('active');
+    }
+
+    evidenceModalClose.addEventListener('click', () => {
+      evidenceModal.classList.remove('active');
+    });
+    evidenceModal.addEventListener('click', (e) => {
+      if (e.target === evidenceModal) evidenceModal.classList.remove('active');
+    });
   </script>
 </body>
 </html>
