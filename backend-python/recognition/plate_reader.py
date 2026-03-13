@@ -1,7 +1,8 @@
 """
-RoadVision — Plate Reader (YOLO Detection + CRNN Recognition)
-Detects license plates using a dedicated YOLOv8 plate detector model,
-applies geometric filters, preprocesses crops, and reads text via CRNN.
+RoadVision — Plate Reader (YOLOv8 Dedicated License Plate Detector)
+Loads the keremberke/yolov8-license-plate model once at startup,
+detects plates, applies geometric filters, preprocesses crops for OCR,
+and reads text via PaddleOCR (or CRNN when weights are available).
 """
 
 import logging
@@ -23,15 +24,16 @@ PLATE_MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
 )
 
-DETECTION_CONF = 0.5  # YOLO detection confidence threshold (raised to reduce FPs)
+DETECTION_CONF = 0.3  # YOLO detection confidence threshold (lowered to catch more plates)
 
-# ---- Geometric Filter Thresholds ----
-MIN_ASPECT_RATIO = 1.5   # w/h minimum (Indian two-wheeler plates can be squarer)
-MAX_ASPECT_RATIO = 6.0   # w/h maximum
-MIN_PLATE_WIDTH = 60     # Minimum crop width in pixels (smaller plates on two-wheelers)
-MIN_PLATE_HEIGHT = 18    # Minimum crop height in pixels
-MAX_WIDTH_RATIO = 0.5    # Max plate width relative to frame width (stricter)
-MIN_Y_RATIO = 0.30       # Reject plates in top 30% of frame (Indian dashcams mounted lower)
+# ---- Geometric Filter Thresholds (tuned for Indian roads) ----
+MIN_ASPECT_RATIO = 1.2   # w/h minimum (more lenient for two-wheeler plates)
+MAX_ASPECT_RATIO = 7.0   # w/h maximum (more lenient for wide plates)
+MIN_PLATE_WIDTH = 40     # Minimum crop width in pixels (reduced)
+MIN_PLATE_HEIGHT = 12    # Minimum crop height in pixels (reduced)
+
+# ---- OCR Confidence Threshold ----
+OCR_MIN_CONFIDENCE = 0.5  # Lowered to catch more plates
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 6
@@ -50,35 +52,36 @@ KNOWN_FALSE_POSITIVES = {
 }
 
 
-def _get_plate_model():
-    """Load the YOLO model for license plate detection.
+def load_plate_model():
+    """Load the dedicated YOLOv8 license plate detector model.
 
-    Prefers the dedicated license_plate_detector.pt model.
-    Falls back to yolov8n.pt (general object detection) if the plate
-    detector is not available — geometric filters will compensate.
+    MUST be called once at startup. Raises FileNotFoundError if the
+    model file is missing — the server cannot operate without it.
     """
     global _plate_model
+    if _plate_model is not None:
+        return _plate_model
+
+    from ultralytics import YOLO
+
+    if not os.path.exists(PLATE_MODEL_PATH):
+        raise FileNotFoundError(
+            f"License plate detector model not found at: {PLATE_MODEL_PATH}\n"
+            f"Please place 'license_plate_detector.pt' in backend-python/models/.\n"
+            f"This model is required — the server cannot start without it."
+        )
+
+    logger.info(f"Loading YOLOv8 plate detector: {PLATE_MODEL_PATH}")
+    _plate_model = YOLO(PLATE_MODEL_PATH)
+    logger.info("YOLOv8 plate detector loaded successfully.")
+    return _plate_model
+
+
+def _get_plate_model():
+    """Return the already-loaded YOLO model (singleton)."""
+    global _plate_model
     if _plate_model is None:
-        from ultralytics import YOLO
-
-        if os.path.exists(PLATE_MODEL_PATH):
-            logger.info(f"Loading YOLO plate detector: {PLATE_MODEL_PATH}")
-            _plate_model = YOLO(PLATE_MODEL_PATH)
-        else:
-            # Fallback to general YOLO model — geometric filters will
-            # reject windshield/bumper false positives
-            fallback = os.path.join(
-                os.path.dirname(__file__), '..', 'models', 'yolov8s.pt'
-            )
-            if not os.path.exists(fallback):
-                fallback = 'yolov8s.pt'
-            logger.warning(
-                f"Plate detector not found at {PLATE_MODEL_PATH}. "
-                f"Falling back to general model: {fallback}. "
-                f"For best results, add license_plate_detector.pt."
-            )
-            _plate_model = YOLO(fallback)
-
+        return load_plate_model()
     return _plate_model
 
 
@@ -86,16 +89,13 @@ def _get_plate_model():
 
 def passes_geometric_filter(
     x1: int, y1: int, x2: int, y2: int,
-    frame_width: int, frame_height: int,
 ) -> bool:
     """
-    Apply geometric filters to a detected bounding box.
+    Apply geometric filters to a detected plate bounding box.
 
     Rejects if:
-      - Aspect ratio (w/h) outside [2, 6]
-      - Width < 80 or height < 25
-      - Width > 50% of frame width
-      - Top edge (y1) in upper 45% of frame
+      - Aspect ratio (w/h) outside [1.5, 6.0]
+      - Width < 60 or height < 18
     """
     w = x2 - x1
     h = y2 - y1
@@ -110,12 +110,6 @@ def passes_geometric_filter(
     if w < MIN_PLATE_WIDTH or h < MIN_PLATE_HEIGHT:
         return False
 
-    if w > frame_width * MAX_WIDTH_RATIO:
-        return False
-
-    if y1 < frame_height * MIN_Y_RATIO:
-        return False
-
     return True
 
 
@@ -123,12 +117,13 @@ def passes_geometric_filter(
 
 def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     """
-    Preprocess a plate crop for CRNN recognition.
+    Preprocess a plate crop for OCR recognition.
 
     Steps:
       1. Convert to grayscale
       2. Bilateral filter (noise reduction, edge preservation)
       3. OTSU threshold (binarization)
+      4. Resize to 160×40 for optimal OCR input
     """
     # Grayscale
     if len(plate_crop.shape) == 3:
@@ -144,74 +139,38 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
         filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
 
-    return thresh
+    # Resize to standard OCR input size
+    plate_processed = cv2.resize(thresh, (160, 40))
+
+    return plate_processed
 
 
 # ---- YOLO Detection ----
-
-# COCO class IDs for vehicles (used when falling back to yolov8n.pt)
-VEHICLE_CLASSES = {2, 3, 5, 7}  # car, motorcycle, bus, truck
-
-# Track whether we're using a dedicated plate detector or general model
-_is_plate_detector = None
-
-
-def _check_is_plate_detector():
-    """Check if the loaded model is a dedicated plate detector or general model."""
-    global _is_plate_detector
-    if _is_plate_detector is None:
-        _is_plate_detector = os.path.exists(PLATE_MODEL_PATH)
-    return _is_plate_detector
-
-
-def _estimate_plate_region(x1: int, y1: int, x2: int, y2: int,
-                           frame_shape: tuple) -> tuple:
-    """
-    Estimate the license plate region from a vehicle bounding box.
-    Plates are typically at the bottom-center of the vehicle.
-
-    Returns: (px1, py1, px2, py2) of estimated plate region.
-    """
-    vw = x2 - x1
-    vh = y2 - y1
-
-    # Plate is roughly in the bottom 20% of the vehicle, center 40%
-    px1 = int(x1 + vw * 0.25)
-    py1 = int(y1 + vh * 0.75)
-    px2 = int(x1 + vw * 0.75)
-    py2 = int(y1 + vh * 0.95)
-
-    # Clamp to frame bounds
-    h_max, w_max = frame_shape[:2]
-    px1 = max(0, min(px1, w_max - 1))
-    py1 = max(0, min(py1, h_max - 1))
-    px2 = max(px1 + 10, min(px2, w_max))
-    py2 = max(py1 + 5, min(py2, h_max))
-
-    return px1, py1, px2, py2
-
 
 def detect_plates(
     frame: np.ndarray,
 ) -> List[dict]:
     """
-    Detect license plates in a single frame.
+    Detect license plates in a single frame using the dedicated
+    YOLOv8 license plate detector model.
 
-    If using a dedicated plate detector: bounding boxes are plate regions.
-    If using yolov8n fallback: detects vehicles and estimates plate regions.
+    Only keeps detections with class 'license_plate' (or class index 0
+    for single-class plate detector models).
 
     Returns list of dicts with:
       - 'bbox': [x, y, w, h]
-      - 'crop': preprocessed plate image (numpy)
+      - 'crop': preprocessed plate image (numpy, 160×40)
       - 'raw_crop': original BGR plate crop
       - 'confidence': YOLO detection confidence
     """
     model = _get_plate_model()
-    is_plate_model = _check_is_plate_detector()
-    frame_height, frame_width = frame.shape[:2]
 
     results = model(frame, verbose=False, conf=DETECTION_CONF)
     detections = []
+    filtered_count = 0
+
+    # Get class name mapping from model
+    class_names = model.names if hasattr(model, 'names') else {}
 
     for result in results:
         boxes = result.boxes
@@ -221,50 +180,49 @@ def detect_plates(
         for box in boxes:
             cls_id = int(box.cls[0])
             conf = float(box.conf[0])
+
+            # Only keep 'license_plate' class detections
+            # For single-class plate detector models, class 0 is the plate
+            # Handle cases where class names are stringified lists like "['plate']"
+            cls_name = class_names.get(cls_id, '').lower()
+            cls_name = re.sub(r"[^a-z0-9]", "", cls_name) # Strip punctuation and spaces
+            if cls_name not in ('licenseplate', 'plate', ''):
+                # If the model has named classes and this isn't a plate, skip
+                if class_names:
+                    continue
+
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
 
-            if is_plate_model:
-                # Dedicated plate detector — bbox IS the plate
-                plate_x1, plate_y1, plate_x2, plate_y2 = x1, y1, x2, y2
-            else:
-                # General model (yolov8n) — only process vehicles
-                if cls_id not in VEHICLE_CLASSES:
-                    continue
-                # Estimate plate region from vehicle bbox
-                plate_x1, plate_y1, plate_x2, plate_y2 = \
-                    _estimate_plate_region(x1, y1, x2, y2, frame.shape)
-
-            # Apply geometric filters on the plate region
-            if not passes_geometric_filter(
-                plate_x1, plate_y1, plate_x2, plate_y2,
-                frame_width, frame_height
-            ):
-                # For vehicle fallback, relax filters (plate estimate may be small)
-                if not is_plate_model:
-                    pw = plate_x2 - plate_x1
-                    ph = plate_y2 - plate_y1
-                    if pw < 40 or ph < 10:
-                        continue
-                    # Accept the estimated region even if filters fail
-                else:
-                    continue
+            # Apply geometric filters
+            if not passes_geometric_filter(x1, y1, x2, y2):
+                filtered_count += 1
+                w, h = x2 - x1, y2 - y1
+                ratio = w / h if h > 0 else 0
+                logger.debug(
+                    f"Filtered plate: size={w}x{h}, ratio={ratio:.2f}, "
+                    f"conf={conf:.2f}"
+                )
+                continue
 
             # Crop the plate region
-            raw_crop = frame[plate_y1:plate_y2, plate_x1:plate_x2]
+            raw_crop = frame[y1:y2, x1:x2]
             if raw_crop.size == 0:
                 continue
 
-            # Preprocess for recognition
+            # Preprocess for recognition (grayscale → bilateral → OTSU → 160×40)
             processed = preprocess_plate_crop(raw_crop)
 
-            w = plate_x2 - plate_x1
-            h = plate_y2 - plate_y1
+            w = x2 - x1
+            h = y2 - y1
             detections.append({
-                'bbox': [plate_x1, plate_y1, w, h],
+                'bbox': [x1, y1, w, h],
                 'crop': processed,
                 'raw_crop': raw_crop,
                 'confidence': conf,
             })
+
+    if filtered_count > 0:
+        logger.debug(f"Filtered {filtered_count} plates by geometric constraints")
 
     return detections
 
@@ -273,7 +231,7 @@ def detect_plates(
 
 def clean_text(text: str) -> str:
     """
-    Clean raw OCR/CRNN text for plate processing.
+    Clean raw OCR text for plate processing.
 
     Steps:
       1. Uppercase
@@ -316,10 +274,6 @@ def is_garbage_text(text: str) -> bool:
     if len(set(text)) <= 1:
         return True
 
-    # All digits or all letters
-    if text.isdigit() or text.isalpha():
-        return True
-
     # Repeating 2-char patterns
     if len(text) >= 6:
         pair = text[:2]
@@ -328,17 +282,17 @@ def is_garbage_text(text: str) -> bool:
 
     # Low entropy
     unique_ratio = len(set(text)) / len(text)
-    if unique_ratio < 0.3 and len(text) >= 6:
+    if unique_ratio < 0.25 and len(text) >= 6:
         return True
 
     # Must start with a letter (Indian plates start with state code)
     if not text[0].isalpha():
         return True
 
-    # Must have at least 2 letters and 2 digits
+    # Must have at least 2 letters and 1 digit (more lenient)
     letter_count = sum(1 for c in text if c.isalpha())
     digit_count = sum(1 for c in text if c.isdigit())
-    if letter_count < 2 or digit_count < 2:
+    if letter_count < 2 or digit_count < 1:
         return True
 
     return False
@@ -356,16 +310,16 @@ def normalize_plate(text: str) -> str:
 
 def read_plate(plate_image: np.ndarray) -> Optional[str]:
     """
-    Read text from a preprocessed plate crop image using CRNN.
+    Read text from a plate crop image using CRNN/PaddleOCR.
 
     Pipeline:
-      1. CRNN recognition → raw text + confidence
-      2. Confidence filter (≥ 0.3)
+      1. OCR recognition → raw text + confidence
+      2. Confidence filter (≥ 0.5)
       3. Clean text
       4. Garbage rejection
 
     Args:
-        plate_image: Preprocessed grayscale/thresholded plate crop.
+        plate_image: Raw BGR plate crop (not preprocessed).
 
     Returns:
         Cleaned plate text or None if unreadable/garbage.
@@ -376,14 +330,19 @@ def read_plate(plate_image: np.ndarray) -> Optional[str]:
     try:
         raw_text, confidence = recognize_plate(plate_image)
 
-        if not raw_text or confidence < 0.3:
-            logger.debug(f"CRNN result too low confidence: '{raw_text}' ({confidence:.2f})")
+        if not raw_text:
+            logger.debug("OCR returned empty text")
+            return None
+            
+        if confidence < OCR_MIN_CONFIDENCE:
+            logger.debug(f"OCR confidence too low: '{raw_text}' ({confidence:.2f})")
             return None
 
         cleaned = clean_text(raw_text)
+        logger.debug(f"OCR: '{raw_text}' → cleaned: '{cleaned}' (conf: {confidence:.2f})")
 
         if is_garbage_text(cleaned):
-            logger.debug(f"Rejected garbage CRNN result: '{cleaned}'")
+            logger.debug(f"Rejected as garbage: '{cleaned}'")
             return None
 
         return cleaned
@@ -395,7 +354,7 @@ def read_plate(plate_image: np.ndarray) -> Optional[str]:
 
 def get_read_confidence(plate_image: np.ndarray) -> float:
     """
-    Get the CRNN recognition confidence for a plate image.
+    Get the OCR recognition confidence for a plate image.
 
     Returns:
         Float between 0 and 1. Returns 0.0 on failure.
@@ -407,5 +366,5 @@ def get_read_confidence(plate_image: np.ndarray) -> float:
         _, confidence = recognize_plate(plate_image)
         return confidence
     except Exception as e:
-        logger.error(f"CRNN confidence error: {e}")
+        logger.error(f"OCR confidence error: {e}")
         return 0.0
