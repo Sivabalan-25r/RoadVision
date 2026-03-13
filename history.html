@@ -38,6 +38,7 @@
                   <th>Detected Registration</th>
                   <th>Correct Registration</th>
                   <th>Violation</th>
+                  <th>Evidence</th>
                   <th>Timestamp</th>
                   <th style="text-align:right">Actions</th>
                 </tr>
@@ -51,6 +52,7 @@
                   <td><span class="plate-number">TN 1O AB 1234</span></td>
                   <td style="color:var(--text-secondary)">TN 10 AB 1234</td>
                   <td><span class="badge alert">Character Manipulation</span></td>
+                  <td><div class="evidence-thumb" data-plate="TN1OAB1234" data-corrected="TN10AB1234" data-violation="Character Manipulation" data-confidence="94"><span class="material-symbols-outlined" style="font-size:20px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; width:100%; height:100%;">image</span></div></td>
                   <td>
                     <div>
                       <span style="font-size:14px">Oct 27, 2023</span><br/>
@@ -69,6 +71,7 @@
                   <td><span class="plate-number">MH12 RN 9876</span></td>
                   <td style="color:var(--text-secondary)">MH 12 RN 9876</td>
                   <td><span class="badge warning">Spacing Manipulation</span></td>
+                  <td><div class="evidence-thumb" data-plate="MH12RN9876" data-corrected="MH 12 RN 9876" data-violation="Spacing Manipulation" data-confidence="91"><span class="material-symbols-outlined" style="font-size:20px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; width:100%; height:100%;">image</span></div></td>
                   <td>
                     <div>
                       <span style="font-size:14px">Oct 27, 2023</span><br/>
@@ -87,6 +90,7 @@
                   <td><span class="plate-number">KA 01 MG 5566</span></td>
                   <td style="color:var(--text-secondary)">KA 01 MG 5566</td>
                   <td><span class="badge warning">Illegal Font</span></td>
+                  <td><div class="evidence-thumb" data-plate="KA01MG5566" data-corrected="KA 01 MG 5566" data-violation="Illegal Font" data-confidence="88"><span class="material-symbols-outlined" style="font-size:20px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; width:100%; height:100%;">image</span></div></td>
                   <td>
                     <div>
                       <span style="font-size:14px">Oct 27, 2023</span><br/>
@@ -105,6 +109,7 @@
                   <td><span class="plate-number">UP 16 AT 4321</span></td>
                   <td style="color:var(--text-secondary)">UP 16 AT 4329</td>
                   <td><span class="badge alert">Tampered Plate</span></td>
+                  <td><div class="evidence-thumb" data-plate="UP16AT4321" data-corrected="UP 16 AT 4329" data-violation="Tampered Plate" data-confidence="85"><span class="material-symbols-outlined" style="font-size:20px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; width:100%; height:100%;">image</span></div></td>
                   <td>
                     <div>
                       <span style="font-size:14px">Oct 27, 2023</span><br/>
@@ -123,6 +128,7 @@
                   <td><span class="plate-number">HR26DQ0045</span></td>
                   <td style="color:var(--text-secondary)">HR 26 DQ 0045</td>
                   <td><span class="badge alert">Plate Pattern Mismatch</span></td>
+                  <td><div class="evidence-thumb" data-plate="HR26DQ0045" data-corrected="HR 26 DQ 0045" data-violation="Plate Pattern Mismatch" data-confidence="92"><span class="material-symbols-outlined" style="font-size:20px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; width:100%; height:100%;">image</span></div></td>
                   <td>
                     <div>
                       <span style="font-size:14px">Oct 27, 2023</span><br/>
@@ -149,8 +155,89 @@
     </div>
   </div>
 
+  <!-- Evidence Modal -->
+  <div class="evidence-modal" id="evidenceModal">
+    <div class="evidence-modal-content">
+      <button class="evidence-modal-close" id="evidenceModalClose">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+      <img id="evidenceModalImg" src="" alt="Evidence frame" />
+      <div class="evidence-modal-details" id="evidenceModalDetails"></div>
+    </div>
+  </div>
+
   <script src="components/loader.js"></script>
+  <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
+<<<<<<< HEAD
   <script src="components/pagination.js"></script>
+=======
+  <script>
+    // ============ Evidence Modal Logic ============
+    const evidenceModal = document.getElementById('evidenceModal');
+    const evidenceModalImg = document.getElementById('evidenceModalImg');
+    const evidenceModalDetails = document.getElementById('evidenceModalDetails');
+    const evidenceModalClose = document.getElementById('evidenceModalClose');
+
+    evidenceModalClose.addEventListener('click', () => {
+      evidenceModal.classList.remove('active');
+    });
+    evidenceModal.addEventListener('click', (e) => {
+      if (e.target === evidenceModal) evidenceModal.classList.remove('active');
+    });
+
+    // Populate evidence thumbnails from localStorage on load
+    function populateEvidenceThumbnails() {
+      document.querySelectorAll('.evidence-thumb').forEach(thumb => {
+        const plate = thumb.dataset.plate;
+        const evidence = getEvidenceByPlate(plate);
+
+        if (evidence && evidence.image) {
+          thumb.innerHTML = `<img src="${evidence.image}" alt="Evidence: ${plate}" />`;
+        }
+
+        // Click to open modal
+        thumb.addEventListener('click', () => {
+          const corrected = thumb.dataset.corrected;
+          const violation = thumb.dataset.violation;
+          const confidence = thumb.dataset.confidence;
+          const imgSrc = evidence ? evidence.image : '';
+
+          if (imgSrc) {
+            evidenceModalImg.src = imgSrc;
+            evidenceModalImg.style.display = 'block';
+          } else {
+            evidenceModalImg.src = '';
+            evidenceModalImg.style.display = 'none';
+          }
+
+          evidenceModalDetails.innerHTML = `
+            ${!imgSrc ? '<p style="padding:24px 0 8px; text-align:center; color:var(--text-muted); font-size:13px;"><span class="material-symbols-outlined" style="font-size:32px; display:block; margin-bottom:8px;">image_not_supported</span>No evidence frame captured yet.<br>Run video analysis on the Dashboard first.</p>' : ''}
+            <div class="detection-row">
+              <span class="detection-label">Detected Plate</span>
+              <span class="plate-number">${plate}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Correct Plate</span>
+              <span class="detection-value">${corrected}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Violation</span>
+              <span class="badge alert">${violation}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Confidence</span>
+              <span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span>
+            </div>
+          `;
+          evidenceModal.classList.add('active');
+        });
+      });
+    }
+
+    // Run on page load
+    window.addEventListener('load', populateEvidenceThumbnails);
+  </script>
+>>>>>>> fb8299639ce0362a1df4afd5f37ebca61e840d55
 </body>
 </html>
