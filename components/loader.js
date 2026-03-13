@@ -54,4 +54,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('Failed to load header:', e);
     }
   }
+
+  // Load Background (Dark Veil)
+  try {
+    const res = await fetch('components/dark-veil.html');
+    const html = await res.text();
+    // Inject at the beginning of body
+    document.body.insertAdjacentHTML('afterbegin', html);
+
+    // Initialize WebGL Animation
+    const { initDarkVeil } = await import('./dark-veil.js');
+    initDarkVeil();
+  } catch (e) {
+    console.error('Failed to load background:', e);
+  }
 });

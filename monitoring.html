@@ -51,7 +51,7 @@
         </div>
 
         <!-- Stats Row -->
-        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
               <span class="stat-label" style="margin-bottom:0">Plates Scanned</span>
@@ -66,20 +66,7 @@
             </div>
             <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Measured in the last 60 minutes</p>
           </div>
-          <div class="stat-card">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-              <span class="stat-label" style="margin-bottom:0">Valid Plates</span>
-              <span class="material-symbols-outlined" style="color:var(--success); background:var(--success-glow); padding:8px; border-radius:var(--radius-md);">check_circle</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-value">1,262</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">arrow_upward</span>
-                10%
-              </span>
-            </div>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Database match successful</p>
-          </div>
+
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
               <span class="stat-label" style="margin-bottom:0">Plate Violations</span>
@@ -100,7 +87,7 @@
         <div class="card" style="margin-top:32px;">
           <div class="card-header">
             <h3>Recent Detection Log</h3>
-            <a href="history.html" style="color:var(--primary); font-size:13px; font-weight:600;">View All Log</a>
+            <a href="history.html" style="color:var(--primary); font-size:13px; font-weight:600;">View All Logs</a>
           </div>
           <div style="overflow-x:auto;">
             <table class="data-table">
@@ -150,9 +137,7 @@
   </div>
 
   <script src="components/loader.js"></script>
-<<<<<<< HEAD
   <script src="components/glare-hover.js"></script>
-=======
   <script>
     // ============ Canvas Bounding Box Renderer ============
     const canvas = document.getElementById('bboxCanvas');
@@ -283,6 +268,5 @@
       ];
     }
   </script>
->>>>>>> a1b9bd3dc27df4a69b74c44ae441b68a63fd1004
 </body>
 </html>

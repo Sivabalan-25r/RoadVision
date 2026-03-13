@@ -1,0 +1,20 @@
+<div class="grainient-container">
+  <!-- Grained SVG Filter -->
+  <svg style="display: none;">
+    <filter id="grainy">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch" />
+      <feColorMatrix type="saturate" values="0" />
+    </filter>
+  </svg>
+
+  <!-- Moving Blobs -->
+  <div class="blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="blob blob-4"></div>
+  </div>
+
+  <!-- Noise Overlay -->
+  <div class="grain-overlay"></div>
+</div>

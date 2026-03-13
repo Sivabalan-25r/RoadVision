@@ -58,7 +58,7 @@ html { height: 100%; -webkit-font-smoothing: antialiased; }
 
 body {
   font-family: var(--font-family);
-  background: var(--bg-body);
+  background: #020617;
   color: var(--text-primary);
   height: 100%;
   overflow: hidden;
@@ -488,6 +488,25 @@ input { font-family: inherit; }
 .cam-info .cam-name { font-weight: 700; }
 .cam-info .cam-time { opacity: .7; margin-top: 2px; }
 
+/* ---------- Dark Veil Background ---------- */
+.dark-veil-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background: #020617;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#dark-veil-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* ---------- Glare Hover Effect ---------- */
 .glare-container {
   position: absolute;
@@ -585,7 +604,7 @@ input { font-family: inherit; }
 
 /* ---------- Vehicle Thumbnail ---------- */
 .vehicle-thumb {
-  width: 48px;
+  width: 130px;
   height: 48px;
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -677,7 +696,7 @@ input { font-family: inherit; }
 .page-btns {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .page-btns button {
@@ -687,17 +706,35 @@ input { font-family: inherit; }
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
+  background: transparent;
+  border: 1px solid var(--border-color);
   transition: all .15s;
 }
 
-.page-btns button:hover { color: var(--text-primary); border-color: var(--text-muted); }
-.page-btns button.active { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
-.page-btns .dots { color: var(--text-muted); padding: 0 6px; font-size: 13px; }
+.page-btns button:hover:not(.active) {
+  background: rgba(255,255,255,.05);
+  color: var(--text-primary);
+}
+
+.page-btns button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  font-weight: 700;
+}
+
+.page-btns .dots {
+  color: var(--text-muted);
+  padding: 0 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: flex-end;
+  height: 36px;
+  padding-bottom: 8px;
+}
 
 /* ---------- Playback Controls Overlay ---------- */
 .playback-controls {
@@ -881,6 +918,5 @@ input { font-family: inherit; }
   flex-shrink: 0;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+
+
