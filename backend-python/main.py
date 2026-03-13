@@ -16,6 +16,8 @@ import os
 import tempfile
 from typing import List
 
+import cv2
+import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -241,4 +243,125 @@ async def root():
         "docs": "/docs",
         "health": "/health",
         "analyze": "POST /analyze-video",
+        "live": "GET /api/live-detections",
     }
+
+
+# ---- Live Monitoring Endpoint ----
+@app.get("/api/live-detections")
+async def get_live_detections():
+    """
+    Get live plate detections from a camera feed or video stream.
+    
+    For demo purposes, this returns mock detections.
+    In production, this would connect to a live camera feed.
+    """
+    # TODO: Connect to actual camera feed
+    # For now, return mock detections
+    mock_detections = [
+        {
+            "detected_plate": "WB65D18753",
+            "correct_plate": "WB 65 D 18753",
+            "violation": None,
+            "confidence": 0.95,
+            "bbox": [35, 45, 18, 8],  # [x%, y%, width%, height%]
+        },
+        {
+            "detected_plate": "MH12AB1234",
+            "correct_plate": "MH 12 AB 1234",
+            "violation": None,
+            "confidence": 0.92,
+            "bbox": [60, 30, 16, 7],
+        },
+        {
+            "detected_plate": "TN1OAB5678",
+            "correct_plate": "TN10AB5678",
+            "violation": "Character Manipulation",
+            "confidence": 0.88,
+            "bbox": [25, 55, 17, 8],
+        },
+    ]
+    
+    return JSONResponse(content={"detections": mock_detections})
+
+
+# ---- Live Camera Stream Processing ----
+@app.post("/api/process-frame")
+async def process_camera_frame(file: UploadFile = File(...)):
+    """
+    Process a single camera frame and return YOLO detections with bounding boxes.
+    
+    This endpoint is designed for live camera feeds where frames are sent
+    one at a time for real-time processing.
+    
+    Returns:
+        JSON with detected plates and their bounding boxes (as percentages).
+    """
+    try:
+        # Read the uploaded frame
+        contents = await file.read()
+        nparr = np.frombuffer(contents, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            raise HTTPException(status_code=400, detail="Invalid image")
+        
+        # Get frame dimensions
+        frame_height, frame_width = frame.shape[:2]
+        
+        # Run YOLO detection
+        from recognition.plate_reader import detect_plates
+        detections = detect_plates(frame, frame_number=0)
+        
+        # Convert detections to percentage-based bounding boxes
+        results = []
+        for det in detections:
+            bbox = det['bbox']  # [x, y, w, h] in pixels
+            
+            # Convert to percentages
+            x_pct = (bbox[0] / frame_width) * 100
+            y_pct = (bbox[1] / frame_height) * 100
+            w_pct = (bbox[2] / frame_width) * 100
+            h_pct = (bbox[3] / frame_height) * 100
+            
+            # Try to read the plate text
+            from recognition.plate_reader import read_plate
+            plate_text = read_plate(det['raw_crop'], det['crop'])
+            
+            if plate_text:
+                # Validate the plate
+                from rules.plate_rules import validate_plate
+                validation = validate_plate(plate_text)
+                
+                results.append({
+                    "detected_plate": validation.detected_plate,
+                    "correct_plate": validation.correct_plate,
+                    "violation": validation.violation,
+                    "confidence": round(det['confidence'], 2),
+                    "bbox": [
+                        round(x_pct, 1),
+                        round(y_pct, 1),
+                        round(w_pct, 1),
+                        round(h_pct, 1)
+                    ]
+                })
+            else:
+                # No OCR text, just show the detection
+                results.append({
+                    "detected_plate": "Detecting...",
+                    "correct_plate": "",
+                    "violation": None,
+                    "confidence": round(det['confidence'], 2),
+                    "bbox": [
+                        round(x_pct, 1),
+                        round(y_pct, 1),
+                        round(w_pct, 1),
+                        round(h_pct, 1)
+                    ]
+                })
+        
+        return JSONResponse(content={"detections": results})
+        
+    except Exception as e:
+        logger.error(f"Frame processing error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

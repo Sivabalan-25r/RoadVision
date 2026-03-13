@@ -293,17 +293,12 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
             logger.error(f"CRNN recognition error: {e}")
             return "", 0.0
 
-    # Fallback: use PaddleOCR/Tesseract
-    # Use preprocessed image for Tesseract if available
+    # Fallback: use EasyOCR/PaddleOCR/Tesseract
+    # Use preprocessed image for OCR if available
     ocr_input = preprocessed_image if preprocessed_image is not None else plate_image
     
-    # PaddleOCR needs BGR/RGB images, convert grayscale to BGR if needed
-    if len(ocr_input.shape) == 2:
-        ocr_input_bgr = cv2.cvtColor(ocr_input, cv2.COLOR_GRAY2BGR)
-    else:
-        ocr_input_bgr = ocr_input
-    
-    return _paddleocr_recognize(ocr_input_bgr)
+    # Try EasyOCR first (best for license plates)
+    return _easyocr_recognize(ocr_input)
 
 
 # ---- PaddleOCR Fallback (replaces EasyOCR for better Indian plate accuracy) ----
@@ -337,6 +332,96 @@ def _get_paddle_reader():
             logger.error(f"Failed to initialize PaddleOCR: {e}", exc_info=True)
             return None
     return _paddle_reader
+
+
+# ---- EasyOCR Fallback (better than Tesseract for license plates) ----
+_easyocr_reader = None
+
+
+def _get_easyocr_reader():
+    """Lazy initialize EasyOCR reader (heavy initialization)."""
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        try:
+            import easyocr
+            logger.info("Initializing EasyOCR reader...")
+            _easyocr_reader = easyocr.Reader(['en'], gpu=False)
+            logger.info("EasyOCR reader ready.")
+        except ImportError:
+            logger.error("EasyOCR not available. Install: pip install easyocr")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to initialize EasyOCR: {e}")
+            return None
+    return _easyocr_reader
+
+
+def _easyocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
+    """
+    Recognize plate text using EasyOCR (best for license plates).
+    
+    Returns:
+        (text, confidence) tuple.
+    """
+    reader = _get_easyocr_reader()
+    if reader is None:
+        return _tesseract_recognize(plate_image)
+
+    try:
+        # Preprocess specifically for EasyOCR
+        # EasyOCR works better with larger, contrast-enhanced images
+        if len(plate_image.shape) == 3:
+            gray = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = plate_image.copy()
+        
+        # Upscale significantly if image is small
+        h, w = gray.shape
+        if w < 200 or h < 60:
+            scale = max(200 / w, 60 / h)
+            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        
+        # Apply CLAHE for better contrast
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        
+        # Convert back to BGR for EasyOCR
+        bgr = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+        
+        # Try with lower confidence threshold and more permissive settings
+        results = reader.readtext(
+            bgr,
+            detail=1,
+            paragraph=False,
+            allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            batch_size=1
+        )
+        
+        if not results:
+            logger.debug("EasyOCR: No text detected, trying Tesseract")
+            return _tesseract_recognize(plate_image)
+        
+        # Combine all detected text
+        texts = []
+        confidences = []
+        for (bbox, text, conf) in results:
+            if conf >= 0.2:  # Very low threshold to catch more text
+                texts.append(text.strip())
+                confidences.append(conf)
+        
+        if not texts:
+            logger.debug("EasyOCR: No text with sufficient confidence, trying Tesseract")
+            return _tesseract_recognize(plate_image)
+        
+        combined_text = ''.join(texts).upper()
+        avg_conf = sum(confidences) / len(confidences)
+        
+        logger.info(f"EasyOCR SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
+        return combined_text, avg_conf
+        
+    except Exception as e:
+        logger.warning(f"EasyOCR failed: {e}, falling back to Tesseract")
+        return _tesseract_recognize(plate_image)
 
 
 def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
@@ -403,7 +488,7 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
 
 def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
     """
-    Fallback OCR using Tesseract.
+    Fallback OCR using Tesseract with enhanced preprocessing.
     
     Returns:
         (text, confidence) tuple.
@@ -415,39 +500,71 @@ def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         # Set Tesseract path for Windows
         pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
         
-        # Convert numpy array to PIL Image
-        if len(plate_image.shape) == 2:
-            # Grayscale
-            pil_img = Image.fromarray(plate_image)
+        # Enhanced preprocessing for Tesseract
+        if len(plate_image.shape) == 3:
+            gray = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
         else:
-            # BGR to RGB
-            import cv2
-            rgb = cv2.cvtColor(plate_image, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(rgb)
+            gray = plate_image.copy()
         
-        # Configure Tesseract for license plates with character whitelist
-        custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        # Upscale if too small
+        h, w = gray.shape
+        if w < 200 or h < 60:
+            scale = max(200 / w, 60 / h)
+            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         
-        # Get text and confidence
-        data = pytesseract.image_to_data(pil_img, config=custom_config, output_type=pytesseract.Output.DICT)
+        # Apply bilateral filter to reduce noise while keeping edges
+        denoised = cv2.bilateralFilter(gray, 9, 75, 75)
         
-        # Extract text with confidence
-        texts = []
-        confidences = []
-        for i, conf in enumerate(data['conf']):
-            if conf > 50 and data['text'][i].strip():
-                texts.append(data['text'][i].strip())
-                confidences.append(conf / 100.0)
+        # Apply CLAHE
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(denoised)
         
-        if not texts:
+        # Try adaptive threshold (often better than OTSU for plates)
+        thresh = cv2.adaptiveThreshold(
+            enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        
+        # Convert to PIL
+        pil_img = Image.fromarray(thresh)
+        
+        # Try multiple PSM modes
+        configs = [
+            r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            r'--oem 3 --psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            r'--oem 3 --psm 13 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+        ]
+        
+        best_text = ""
+        best_conf = 0.0
+        
+        for config in configs:
+            try:
+                data = pytesseract.image_to_data(pil_img, config=config, output_type=pytesseract.Output.DICT)
+                
+                texts = []
+                confidences = []
+                for i, conf in enumerate(data['conf']):
+                    if conf > 40 and data['text'][i].strip():  # Lower threshold
+                        texts.append(data['text'][i].strip())
+                        confidences.append(conf / 100.0)
+                
+                if texts:
+                    combined_text = ''.join(texts).upper()
+                    avg_conf = sum(confidences) / len(confidences)
+                    
+                    # Keep the result with highest confidence
+                    if avg_conf > best_conf:
+                        best_text = combined_text
+                        best_conf = avg_conf
+            except:
+                continue
+        
+        if not best_text:
             logger.debug("Tesseract: No text detected")
             return "", 0.0
         
-        combined_text = ''.join(texts).upper()
-        avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
-        
-        logger.info(f"Tesseract SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
-        return combined_text, avg_conf
+        logger.info(f"Tesseract SUCCESS: '{best_text}' (conf: {best_conf:.2f})")
+        return best_text, best_conf
         
     except ImportError:
         logger.error("Tesseract not available. Install: pip install pytesseract pillow")
