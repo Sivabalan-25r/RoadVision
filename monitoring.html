@@ -30,34 +30,11 @@
         </div>
 
         <!-- Video Feed Viewer -->
-        <div class="frame-viewer" style="margin-bottom:32px;">
+        <div class="frame-viewer" id="monitorViewer" style="margin-bottom:32px;">
           <img src="assets/images/traffic-frame.jpg" alt="Live traffic camera feed — Main Expressway" />
 
-          <!-- Bounding Boxes -->
-          <div class="bbox valid" style="top:25%; left:22%; width:14%; height:18%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">badge</span>
-              Valid Plate
-            </div>
-          </div>
-          <div class="bbox valid" style="top:48%; left:35%; width:12%; height:16%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">badge</span>
-              Valid Plate
-            </div>
-          </div>
-          <div class="bbox suspicious" style="top:32%; right:22%; width:16%; height:20%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">warning</span>
-              Illegal Plate
-            </div>
-          </div>
-          <div class="bbox valid" style="bottom:22%; right:30%; width:14%; height:16%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">badge</span>
-              Valid Plate
-            </div>
-          </div>
+          <!-- Canvas Overlay for Dynamic Bounding Boxes -->
+          <canvas id="bboxCanvas"></canvas>
 
           <!-- Camera Info -->
           <div class="cam-info">
@@ -173,5 +150,135 @@
   </div>
 
   <script src="components/loader.js"></script>
+  <script>
+    // ============ Canvas Bounding Box Renderer ============
+    const canvas = document.getElementById('bboxCanvas');
+    const ctx = canvas.getContext('2d');
+    const viewer = document.getElementById('monitorViewer');
+
+    // Colors matching the design system
+    const COLORS = {
+      valid:     { stroke: '#22C55E', fill: 'rgba(34,197,94,.15)', text: '#22C55E' },
+      violation: { stroke: '#EF4444', fill: 'rgba(239,68,68,.15)', text: '#EF4444' }
+    };
+
+    // ---- Canvas sizing ----
+    function resizeCanvas() {
+      const rect = viewer.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      // Redraw after resize
+      if (currentDetections.length) drawDetections(currentDetections);
+    }
+
+    let currentDetections = [];
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', () => {
+      resizeCanvas();
+      fetchDetections();
+    });
+
+    // ---- Drawing logic ----
+    function drawDetections(detections) {
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // Clear the canvas
+      ctx.clearRect(0, 0, w, h);
+
+      detections.forEach((det) => {
+        if (!det.bbox || det.bbox.length < 4) return;
+
+        // bbox values are percentages: [x%, y%, width%, height%]
+        const x = (det.bbox[0] / 100) * w;
+        const y = (det.bbox[1] / 100) * h;
+        const bw = (det.bbox[2] / 100) * w;
+        const bh = (det.bbox[3] / 100) * h;
+
+        const isViolation = !!det.violation;
+        const palette = isViolation ? COLORS.violation : COLORS.valid;
+
+        // Fill
+        ctx.fillStyle = palette.fill;
+        ctx.fillRect(x, y, bw, bh);
+
+        // Stroke
+        ctx.strokeStyle = palette.stroke;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, bw, bh);
+
+        // Label background
+        const label = det.detected_plate || 'Unknown';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        const textMetrics = ctx.measureText(label);
+        const labelW = textMetrics.width + 12;
+        const labelH = 20;
+        const labelX = x;
+        const labelY = y - labelH;
+
+        ctx.fillStyle = palette.stroke;
+        ctx.beginPath();
+        ctx.roundRect(labelX, labelY, labelW, labelH, [3, 3, 0, 0]);
+        ctx.fill();
+
+        // Label text
+        ctx.fillStyle = '#ffffff';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, labelX + 6, labelY + labelH / 2);
+      });
+    }
+
+    // ---- Fetch detections from backend ----
+    async function fetchDetections() {
+      try {
+        const res = await fetch('/api/live-detections');
+        if (!res.ok) throw new Error('Backend unavailable');
+        const data = await res.json();
+        currentDetections = data.detections || [];
+      } catch (err) {
+        // Fallback: use mock detections for demo
+        currentDetections = getMockDetections();
+      }
+      drawDetections(currentDetections);
+    }
+
+    // Poll for new detections every 3 seconds
+    setInterval(fetchDetections, 3000);
+
+    // ---- Mock data (used when backend is offline) ----
+    function getMockDetections() {
+      return [
+        {
+          detected_plate: 'ABC-1234',
+          correct_plate: 'ABC 1234',
+          violation: null,
+          confidence: 0.97,
+          bbox: [22, 25, 14, 18]
+        },
+        {
+          detected_plate: 'LMN-5542',
+          correct_plate: 'LMN 5542',
+          violation: null,
+          confidence: 0.95,
+          bbox: [35, 48, 12, 16]
+        },
+        {
+          detected_plate: 'XYZ-9876',
+          correct_plate: 'XYZ 9876',
+          violation: 'Character Manipulation',
+          confidence: 0.91,
+          bbox: [62, 32, 16, 20]
+        },
+        {
+          detected_plate: 'PQR-7788',
+          correct_plate: 'PQR 7788',
+          violation: null,
+          confidence: 0.93,
+          bbox: [56, 60, 14, 16]
+        }
+      ];
+    }
+  </script>
 </body>
 </html>
