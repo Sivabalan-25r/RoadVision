@@ -97,7 +97,7 @@ for img_name in test_images:
         results = ocr.ocr(img, cls=False)
         
         if results and results[0]:
-            texts = []
+            texts: list[str] = []
             
             # Handle PaddleX dict format
             if isinstance(results[0], dict) and 'rec_texts' in results[0]:

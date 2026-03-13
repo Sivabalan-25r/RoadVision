@@ -288,6 +288,56 @@ input { font-family: inherit; }
   transition: all .2s ease;
 }
 
+/* Camera Profile Button */
+.camera-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-secondary);
+  text-decoration: none;
+  transition: all 0.2s;
+  margin-right: 12px;
+  border: 1px solid var(--border-light);
+}
+
+.camera-profile-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.camera-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--primary-glow);
+}
+
+.camera-icon-wrapper .material-symbols-outlined {
+  font-size: 24px;
+  color: var(--primary);
+}
+
+.camera-info-text {
+  text-align: left;
+}
+
+.camera-info-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.camera-info-loc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .header-logout-btn:hover {
   background: rgba(239,68,68,.1);
   color: var(--alert);
@@ -532,6 +582,48 @@ input { font-family: inherit; }
 
 .cam-info .cam-name { font-weight: 700; }
 .cam-info .cam-time { opacity: .7; margin-top: 2px; }
+
+/* Live Detection Stats Overlay */
+.live-stats-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  display: none;
+  z-index: 10;
+}
+
+.live-stats-inner {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.live-stat-item {
+  text-align: center;
+}
+
+.live-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.live-stat-value.legal { color: var(--success); }
+.live-stat-value.illegal { color: var(--alert); }
+.live-stat-value.total { color: var(--primary); }
+
+.live-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  opacity: 0.7;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
 
 /* ---------- Dark Veil Background ---------- */
 .dark-veil-container {
@@ -860,6 +952,7 @@ input { font-family: inherit; }
   cursor: pointer;
   transition: all .25s ease;
   margin-bottom: 24px;
+  width: 100%;
 }
 
 .upload-zone:hover,
@@ -871,6 +964,11 @@ input { font-family: inherit; }
 .upload-zone-inner {
   text-align: center;
   padding: 32px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .upload-icon {

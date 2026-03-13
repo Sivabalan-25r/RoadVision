@@ -156,8 +156,24 @@ def _load_model():
 
     if os.path.exists(MODEL_PATH):
         logger.info(f"Loading CRNN weights from: {MODEL_PATH}")
-        state = torch.load(MODEL_PATH, map_location='cpu', weights_only=True)
-        model.load_state_dict(state)
+        try:
+            # Handle PyTorch 2.6+ weights_only behavior safely
+            import inspect
+            sig = inspect.signature(torch.load)
+            if 'weights_only' in sig.parameters:
+                state = torch.load(MODEL_PATH, map_location='cpu', weights_only=True)
+            else:
+                state = torch.load(MODEL_PATH, map_location='cpu')
+            model.load_state_dict(state)
+        except Exception as e:
+            logger.error(f"Failed to load CRNN weights: {e}")
+            try:
+                # Fallback to weights_only=False if True fails (for older models on newer PyTorch)
+                state = torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
+                model.load_state_dict(state)
+                logger.info("Successfully loaded CRNN weights with weights_only=False")
+            except:
+                return None
     else:
         # Do NOT generate random placeholder weights — CRNN must not run
         # with untrained weights as it produces garbage output.
@@ -445,44 +461,38 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return _tesseract_recognize(plate_image)
 
     try:
-        # Call OCR without cls parameter for compatibility
+        # PaddleOCR 3.4+ uses PaddleX format - call without cls parameter
         results = reader.ocr(plate_image)
 
         if not results or not results[0]:
-            logger.debug("PaddleOCR returned empty results, trying Tesseract")
-            return _tesseract_recognize(plate_image)
+            logger.debug("PaddleOCR returned empty results, trying EasyOCR")
+            return _easyocr_recognize(plate_image)
 
-        # The installed version might return Paddlex dict format or standard list format
         texts = []
         confidences = []
         
-        # Handle PaddleX dict format
-        if isinstance(results[0], dict) and 'rec_texts' in results[0]:
+        # Handle both PaddleX dict format and standard list format
+        if isinstance(results[0], dict):
+            # PaddleX 3.4+ format: {'rec_texts': [...], 'rec_scores': [...]}
             rec_texts = results[0].get('rec_texts', [])
             rec_scores = results[0].get('rec_scores', [])
             for text, conf in zip(rec_texts, rec_scores):
                 if conf >= 0.5:
-                    texts.append(text)
-                    confidences.append(conf)
-        # Handle standard PaddleOCR format: [[[box], (text, conf)], ...]
+                    texts.append(str(text))
+                    confidences.append(float(conf))
         elif isinstance(results[0], list):
+            # Standard PaddleOCR format: [[[box], (text, conf)], ...]
             for line in results[0]:
                 if line and len(line) >= 2:
-                    # line format: [box_coords, (text, confidence)]
-                    if isinstance(line[1], tuple) and len(line[1]) >= 2:
-                        text, conf = line[1][0], line[1][1]
-                        if conf >= 0.5:
-                            texts.append(str(text))
-                            confidences.append(float(conf))
-                    elif isinstance(line[1], list) and len(line[1]) >= 2:
+                    if isinstance(line[1], (tuple, list)) and len(line[1]) >= 2:
                         text, conf = line[1][0], line[1][1]
                         if conf >= 0.5:
                             texts.append(str(text))
                             confidences.append(float(conf))
 
         if not texts:
-            logger.debug("PaddleOCR: No text with sufficient confidence, trying Tesseract")
-            return _tesseract_recognize(plate_image)
+            logger.debug("PaddleOCR: No text with sufficient confidence, trying EasyOCR")
+            return _easyocr_recognize(plate_image)
 
         combined_text = ''.join(texts).strip().upper()
         avg_conf = sum(confidences) / len(confidences)
@@ -490,8 +500,8 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return combined_text, avg_conf
 
     except Exception as e:
-        logger.warning(f"PaddleOCR failed: {e}, falling back to Tesseract")
-        return _tesseract_recognize(plate_image)
+        logger.warning(f"PaddleOCR failed: {e}, falling back to EasyOCR")
+        return _easyocr_recognize(plate_image)
 
 
 def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
@@ -506,16 +516,27 @@ def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         from PIL import Image
         
         # Robust Tesseract path resolution for Windows
-        tess_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-        if not os.path.exists(tess_path):
-            alt_path = r'C:\Users\Sivab\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
-            if os.path.exists(alt_path):
-                tess_path = alt_path
+        possible_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Users\Sivab\AppData\Local\Programs\Tesseract-OCR\tesseract.exe',
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Programs\Tesseract-OCR\tesseract.exe'),
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        ]
         
-        if os.path.exists(tess_path):
+        tess_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                tess_path = p
+                break
+        
+        if tess_path:
             pytesseract.pytesseract.tesseract_cmd = tess_path
+            logger.info(f"Using Tesseract at: {tess_path}")
         else:
-            logger.warning(f"Tesseract executable not found at {tess_path}. Tesseract fallback will likely fail.")
+            # Check if tesseract is in PATH
+            import shutil
+            if not shutil.which("tesseract"):
+                logger.warning("Tesseract executable not found in common paths or PATH. Tesseract fallback will likely fail.")
         
         # Enhanced preprocessing for Tesseract
         if len(plate_image.shape) == 3:

@@ -88,19 +88,49 @@ async def startup_check():
         )
 
     # ---- Check OCR availability ----
+    ocr_found = False
+    
     if os.path.exists(crnn_path):
         logger.info(f"  ✓ CRNN weights:    {crnn_path}")
+        ocr_found = True
     else:
         logger.warning(f"  ⚠ CRNN weights MISSING: {crnn_path}")
-        logger.warning("    Will use PaddleOCR as OCR engine.")
 
+    # Check PaddleOCR
     try:
         import paddleocr
         logger.info("  ✓ PaddleOCR:       Available")
+        ocr_found = True
     except ImportError:
-        if not os.path.exists(crnn_path):
-            logger.error("  ✗ PaddleOCR NOT INSTALLED and CRNN weights missing!")
-            logger.error("    Run: pip install paddlepaddle paddleocr")
+        logger.debug("  - PaddleOCR:       Not installed")
+
+    # Check EasyOCR
+    try:
+        import easyocr
+        logger.info("  ✓ EasyOCR:         Available")
+        ocr_found = True
+    except ImportError:
+        logger.debug("  - EasyOCR:         Not installed")
+
+    # Check Tesseract
+    try:
+        import pytesseract
+        from recognition.crnn_recognizer import _tesseract_recognize # Trigger path resolution
+        # We don't call it, just check if it's configured
+        tess_path = pytesseract.pytesseract.tesseract_cmd
+        if os.path.exists(tess_path) or os.system("tesseract --version > nul 2>&1") == 0:
+            logger.info(f"  ✓ Tesseract:       Available ({tess_path if os.path.exists(tess_path) else 'in PATH'})")
+            ocr_found = True
+        else:
+            logger.warning("  ⚠ Tesseract:       Executable not found")
+    except ImportError:
+        logger.debug("  - Tesseract:       Not installed")
+
+    if not ocr_found:
+        logger.error("  ✗ FATAL: No OCR engine available (CRNN, PaddleOCR, EasyOCR, or Tesseract)!")
+        logger.error("    Please install at least one fallback: pip install easyocr")
+    else:
+        logger.info("  ✓ OCR Pipeline:    Ready (with fallback support)")
 
     logger.info("=" * 60)
     logger.info("Ready at: http://localhost:8000")
@@ -297,25 +327,32 @@ async def process_camera_frame(file: UploadFile = File(...)):
     Returns:
         JSON with detected plates and their bounding boxes (as percentages).
     """
+    logger.info("Received frame for processing")
+    
     try:
         # Read the uploaded frame
         contents = await file.read()
+        logger.info(f"Frame size: {len(contents)} bytes")
+        
         nparr = np.frombuffer(contents, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
+            logger.error("Failed to decode frame")
             raise HTTPException(status_code=400, detail="Invalid image")
         
         # Get frame dimensions
         frame_height, frame_width = frame.shape[:2]
+        logger.info(f"Frame dimensions: {frame_width}x{frame_height}")
         
         # Run YOLO detection
         from recognition.plate_reader import detect_plates
         detections = detect_plates(frame, frame_number=0)
+        logger.info(f"YOLO detected {len(detections)} plates")
         
         # Convert detections to percentage-based bounding boxes
         results = []
-        for det in detections:
+        for idx, det in enumerate(detections):
             bbox = det['bbox']  # [x, y, w, h] in pixels
             
             # Convert to percentages
@@ -333,6 +370,8 @@ async def process_camera_frame(file: UploadFile = File(...)):
                 from rules.plate_rules import validate_plate
                 validation = validate_plate(plate_text)
                 
+                logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
+                
                 results.append({
                     "detected_plate": validation.detected_plate,
                     "correct_plate": validation.correct_plate,
@@ -347,6 +386,7 @@ async def process_camera_frame(file: UploadFile = File(...)):
                 })
             else:
                 # No OCR text, just show the detection
+                logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")
                 results.append({
                     "detected_plate": "Detecting...",
                     "correct_plate": "",
@@ -360,6 +400,7 @@ async def process_camera_frame(file: UploadFile = File(...)):
                     ]
                 })
         
+        logger.info(f"Returning {len(results)} results to frontend")
         return JSONResponse(content={"detections": results})
         
     except Exception as e:

@@ -50,6 +50,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (titleEl && pageTitles[pageKey]) {
         titleEl.textContent = pageTitles[pageKey];
       }
+
+      // Load camera info from localStorage
+      const cameraData = localStorage.getItem('roadvision_camera');
+      const cameraNameEl = headerSlot.querySelector('#cameraName');
+      const cameraLocEl = headerSlot.querySelector('#cameraLocation');
+
+      if (cameraNameEl && cameraLocEl) {
+        if (cameraData) {
+          try {
+            const camera = JSON.parse(cameraData);
+            cameraNameEl.textContent = camera.name || 'Camera 1';
+            cameraLocEl.textContent = camera.location || 'Unknown Location';
+          } catch (e) {
+            console.error('Error loading camera data:', e);
+          }
+        } else {
+          cameraLocEl.textContent = 'Click to set location';
+        }
+      }
     } catch (e) {
       console.error('Failed to load header:', e);
     }

@@ -23,184 +23,40 @@
         <!-- Page Intro -->
         <div class="section-header" style="margin-bottom:24px;">
           <h2>Illegal Plate Detections</h2>
-          <span class="badge alert">
+          <span class="badge alert" id="flaggedCount">
             <span class="material-symbols-outlined" style="font-size:14px">warning</span>
-            6 Flagged
+            <span id="flaggedNumber">0</span> Flagged
           </span>
         </div>
 
-        <!-- Detections Grid -->
-        <div class="detections-grid">
-
-          <!-- Detection Card 1 -->
-          <div class="detection-card">
-            <div class="detection-card-img" style="padding:0; overflow:hidden;">
-              <img src="assets/images/plates/plate1.png" alt="Cropped plate — TN 1O AB 1234" style="width:100%; height:100%; object-fit:cover;" />
-            </div>
-            <div class="detection-card-body">
-              <div class="detection-row">
-                <span class="detection-label">Detected Plate</span>
-                <span class="plate-number">TN 1O AB 1234</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Correct Plate</span>
-                <span class="detection-value">TN 10 AB 1234</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Violation Type</span>
-                <span class="badge alert">Character Manipulation</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Confidence</span>
-                <span class="detection-value" style="color:var(--success); font-weight:600;">94%</span>
-              </div>
-              <button class="btn-evidence" data-plate="TN1OAB1234" data-corrected="TN10AB1234" data-violation="Character Manipulation" data-confidence="94">
-                <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
-              </button>
-            </div>
+        <!-- Loading State -->
+        <div id="loadingState" style="text-align:center; padding:60px 20px;">
+          <div style="font-size:48px; color:var(--text-muted); margin-bottom:16px;">
+            <span class="material-symbols-outlined" style="font-size:48px;">hourglass_empty</span>
           </div>
-
-          <!-- Detection Card 2 -->
-          <div class="detection-card">
-            <div class="detection-card-img" style="padding:0; overflow:hidden;">
-              <img src="assets/images/plates/plate2.png" alt="Cropped plate — MH12 RN 9876" style="width:100%; height:100%; object-fit:cover;" />
-            </div>
-            <div class="detection-card-body">
-              <div class="detection-row">
-                <span class="detection-label">Detected Plate</span>
-                <span class="plate-number">MH12 RN 9876</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Correct Plate</span>
-                <span class="detection-value">MH 12 RN 9876</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Violation Type</span>
-                <span class="badge warning">Spacing Manipulation</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Confidence</span>
-                <span class="detection-value" style="color:var(--success); font-weight:600;">91%</span>
-              </div>
-              <button class="btn-evidence" data-plate="MH12RN9876" data-corrected="MH 12 RN 9876" data-violation="Spacing Manipulation" data-confidence="91">
-                <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
-              </button>
-            </div>
-          </div>
-
-          <!-- Detection Card 3 -->
-          <div class="detection-card">
-            <div class="detection-card-img" style="padding:0; overflow:hidden;">
-              <img src="assets/images/plates/plate3.png" alt="Cropped plate — KA 01 MG 5566" style="width:100%; height:100%; object-fit:cover;" />
-            </div>
-            <div class="detection-card-body">
-              <div class="detection-row">
-                <span class="detection-label">Detected Plate</span>
-                <span class="plate-number">KA 01 MG 5566</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Correct Plate</span>
-                <span class="detection-value">KA 01 MG 5566</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Violation Type</span>
-                <span class="badge warning">Illegal Font</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Confidence</span>
-                <span class="detection-value" style="color:var(--success); font-weight:600;">88%</span>
-              </div>
-              <button class="btn-evidence" data-plate="KA01MG5566" data-corrected="KA 01 MG 5566" data-violation="Illegal Font" data-confidence="88">
-                <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
-              </button>
-            </div>
-          </div>
-
-          <!-- Detection Card 4 -->
-          <div class="detection-card">
-            <div class="detection-card-img" style="padding:0; overflow:hidden;">
-              <img src="assets/images/plates/plate4.png" alt="Cropped plate — UP 16 AT 4321" style="width:100%; height:100%; object-fit:cover;" />
-            </div>
-            <div class="detection-card-body">
-              <div class="detection-row">
-                <span class="detection-label">Detected Plate</span>
-                <span class="plate-number">UP 16 AT 4321</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Correct Plate</span>
-                <span class="detection-value">UP 16 AT 4329</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Violation Type</span>
-                <span class="badge alert">Tampered Plate</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Confidence</span>
-                <span class="detection-value" style="color:var(--warning); font-weight:600;">85%</span>
-              </div>
-              <button class="btn-evidence" data-plate="UP16AT4321" data-corrected="UP 16 AT 4329" data-violation="Tampered Plate" data-confidence="85">
-                <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
-              </button>
-            </div>
-          </div>
-
-          <!-- Detection Card 5 -->
-          <div class="detection-card">
-            <div class="detection-card-img" style="padding:0; overflow:hidden;">
-              <img src="assets/images/plates/plate5.png" alt="Cropped plate — HR26DQ0045" style="width:100%; height:100%; object-fit:cover;" />
-            </div>
-            <div class="detection-card-body">
-              <div class="detection-row">
-                <span class="detection-label">Detected Plate</span>
-                <span class="plate-number">HR26DQ0045</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Correct Plate</span>
-                <span class="detection-value">HR 26 DQ 0045</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Violation Type</span>
-                <span class="badge alert">Plate Pattern Mismatch</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Confidence</span>
-                <span class="detection-value" style="color:var(--success); font-weight:600;">92%</span>
-              </div>
-              <button class="btn-evidence" data-plate="HR26DQ0045" data-corrected="HR 26 DQ 0045" data-violation="Plate Pattern Mismatch" data-confidence="92">
-                <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
-              </button>
-            </div>
-          </div>
-
-          <!-- Detection Card 6 -->
-          <div class="detection-card">
-            <div class="detection-card-img" style="padding:0; overflow:hidden;">
-              <img src="assets/images/plates/plate6.png" alt="Cropped plate — TN 09 BK 77I2" style="width:100%; height:100%; object-fit:cover;" />
-            </div>
-            <div class="detection-card-body">
-              <div class="detection-row">
-                <span class="detection-label">Detected Plate</span>
-                <span class="plate-number">TN 09 BK 77I2</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Correct Plate</span>
-                <span class="detection-value">TN 09 BK 7712</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Violation Type</span>
-                <span class="badge alert">Character Manipulation</span>
-              </div>
-              <div class="detection-row">
-                <span class="detection-label">Confidence</span>
-                <span class="detection-value" style="color:var(--success); font-weight:600;">96%</span>
-              </div>
-              <button class="btn-evidence" data-plate="TN09BK77I2" data-corrected="TN 09 BK 7712" data-violation="Character Manipulation" data-confidence="96">
-                <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
-              </button>
-            </div>
-          </div>
-
+          <p style="color:var(--text-muted); font-size:14px;">Loading detections...</p>
         </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" style="text-align:center; padding:60px 20px; display:none;">
+          <div style="font-size:48px; color:var(--text-muted); margin-bottom:16px;">
+            <span class="material-symbols-outlined" style="font-size:48px;">search_off</span>
+          </div>
+          <h3 style="margin-bottom:8px; color:var(--text);">No Detections Yet</h3>
+          <p style="color:var(--text-muted); font-size:14px; margin-bottom:24px;">
+            Upload a video on the Dashboard to start detecting illegal plates.
+          </p>
+          <a href="index.html" class="btn-primary">
+            <span class="material-symbols-outlined" style="font-size:18px;">upload</span>
+            Go to Dashboard
+          </a>
+        </div>
+
+        <!-- Detections Grid -->
+        <div class="detections-grid" id="detectionsGrid" style="display:none;">
+          <!-- Detection cards will be dynamically inserted here -->
+        </div>
+
       </div>
     </div>
   </div>
@@ -220,6 +76,98 @@
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
   <script>
+    // ============ Load Real Detections ============
+    const detectionsGrid = document.getElementById('detectionsGrid');
+    const loadingState = document.getElementById('loadingState');
+    const emptyState = document.getElementById('emptyState');
+    const flaggedNumber = document.getElementById('flaggedNumber');
+
+    // Load detections from localStorage (saved from dashboard upload)
+    function loadDetections() {
+      const detectionsData = localStorage.getItem('roadvision_detections');
+      
+      if (!detectionsData) {
+        // No detections found
+        loadingState.style.display = 'none';
+        emptyState.style.display = 'block';
+        flaggedNumber.textContent = '0';
+        return;
+      }
+
+      try {
+        const detections = JSON.parse(detectionsData);
+        
+        // Filter only violations
+        const violations = detections.filter(d => d.violation);
+        
+        if (violations.length === 0) {
+          loadingState.style.display = 'none';
+          emptyState.style.display = 'block';
+          flaggedNumber.textContent = '0';
+          return;
+        }
+
+        // Update count
+        flaggedNumber.textContent = violations.length;
+
+        // Render detection cards
+        detectionsGrid.innerHTML = violations.map((det, index) => {
+          const confidence = Math.round(det.confidence * 100);
+          const badgeClass = det.violation.includes('Tampered') ? 'alert' : 
+                            det.violation.includes('Spacing') ? 'warning' : 'alert';
+          
+          // Try to get evidence image
+          const evidence = getEvidenceByPlate(det.detected_plate);
+          const plateImg = evidence && evidence.image ? evidence.image : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="60"%3E%3Crect width="200" height="60" fill="%23f0f0f0"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-family="Arial" font-size="12"%3ENo Image%3C/text%3E%3C/svg%3E';
+
+          return `
+            <div class="detection-card">
+              <div class="detection-card-img" style="padding:0; overflow:hidden;">
+                <img src="${plateImg}" alt="Plate ${det.detected_plate}" style="width:100%; height:100%; object-fit:cover;" />
+              </div>
+              <div class="detection-card-body">
+                <div class="detection-row">
+                  <span class="detection-label">Detected Plate</span>
+                  <span class="plate-number">${det.detected_plate}</span>
+                </div>
+                <div class="detection-row">
+                  <span class="detection-label">Correct Plate</span>
+                  <span class="detection-value">${det.correct_plate}</span>
+                </div>
+                <div class="detection-row">
+                  <span class="detection-label">Violation Type</span>
+                  <span class="badge ${badgeClass}">${det.violation}</span>
+                </div>
+                <div class="detection-row">
+                  <span class="detection-label">Confidence</span>
+                  <span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span>
+                </div>
+                <button class="btn-evidence" 
+                        data-plate="${det.detected_plate}" 
+                        data-corrected="${det.correct_plate}" 
+                        data-violation="${det.violation}" 
+                        data-confidence="${confidence}">
+                  <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Show grid, hide loading
+        loadingState.style.display = 'none';
+        detectionsGrid.style.display = 'grid';
+
+        // Wire up evidence buttons
+        wireUpEvidenceButtons();
+
+      } catch (e) {
+        console.error('Error loading detections:', e);
+        loadingState.style.display = 'none';
+        emptyState.style.display = 'block';
+      }
+    }
+
     // ============ Evidence Modal Logic ============
     const evidenceModal = document.getElementById('evidenceModal');
     const evidenceModalImg = document.getElementById('evidenceModalImg');
@@ -233,48 +181,52 @@
       if (e.target === evidenceModal) evidenceModal.classList.remove('active');
     });
 
-    // Wire up all View Evidence buttons
-    document.querySelectorAll('.btn-evidence').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const plate = btn.dataset.plate;
-        const corrected = btn.dataset.corrected;
-        const violation = btn.dataset.violation;
-        const confidence = btn.dataset.confidence;
+    function wireUpEvidenceButtons() {
+      document.querySelectorAll('.btn-evidence').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const plate = btn.dataset.plate;
+          const corrected = btn.dataset.corrected;
+          const violation = btn.dataset.violation;
+          const confidence = btn.dataset.confidence;
 
-        // Try to load evidence image from localStorage
-        const evidence = getEvidenceByPlate(plate);
-        const imgSrc = evidence ? evidence.image : '';
+          // Try to load evidence image from localStorage
+          const evidence = getEvidenceByPlate(plate);
+          const imgSrc = evidence ? evidence.image : '';
 
-        if (imgSrc) {
-          evidenceModalImg.src = imgSrc;
-          evidenceModalImg.style.display = 'block';
-        } else {
-          evidenceModalImg.src = '';
-          evidenceModalImg.style.display = 'none';
-        }
+          if (imgSrc) {
+            evidenceModalImg.src = imgSrc;
+            evidenceModalImg.style.display = 'block';
+          } else {
+            evidenceModalImg.src = '';
+            evidenceModalImg.style.display = 'none';
+          }
 
-        evidenceModalDetails.innerHTML = `
-          ${!imgSrc ? '<p style="padding:24px 0 8px; text-align:center; color:var(--text-muted); font-size:13px;"><span class="material-symbols-outlined" style="font-size:32px; display:block; margin-bottom:8px;">image_not_supported</span>No evidence frame captured yet.<br>Run video analysis on the Dashboard first.</p>' : ''}
-          <div class="detection-row">
-            <span class="detection-label">Detected Plate</span>
-            <span class="plate-number">${plate}</span>
-          </div>
-          <div class="detection-row">
-            <span class="detection-label">Correct Plate</span>
-            <span class="detection-value">${corrected}</span>
-          </div>
-          <div class="detection-row">
-            <span class="detection-label">Violation</span>
-            <span class="badge alert">${violation}</span>
-          </div>
-          <div class="detection-row">
-            <span class="detection-label">Confidence</span>
-            <span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span>
-          </div>
-        `;
-        evidenceModal.classList.add('active');
+          evidenceModalDetails.innerHTML = `
+            ${!imgSrc ? '<p style="padding:24px 0 8px; text-align:center; color:var(--text-muted); font-size:13px;"><span class="material-symbols-outlined" style="font-size:32px; display:block; margin-bottom:8px;">image_not_supported</span>No evidence frame captured yet.<br>Run video analysis on the Dashboard first.</p>' : ''}
+            <div class="detection-row">
+              <span class="detection-label">Detected Plate</span>
+              <span class="plate-number">${plate}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Correct Plate</span>
+              <span class="detection-value">${corrected}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Violation</span>
+              <span class="badge alert">${violation}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Confidence</span>
+              <span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span>
+            </div>
+          `;
+          evidenceModal.classList.add('active');
+        });
       });
-    });
+    }
+
+    // Load detections on page load
+    window.addEventListener('load', loadDetections);
   </script>
 </body>
 </html>

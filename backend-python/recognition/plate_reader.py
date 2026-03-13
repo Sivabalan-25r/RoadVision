@@ -27,11 +27,11 @@ PLATE_MODEL_PATH = os.path.join(
 DETECTION_CONF = 0.3  # YOLO detection confidence threshold (lowered to catch more plates)
 
 # ---- Geometric Filter Thresholds (tuned for Indian roads) ----
-MIN_ASPECT_RATIO = 1.5   # w/h minimum (standard plate ratio)
-MAX_ASPECT_RATIO = 6.0   # w/h maximum (wide plates)
-MIN_PLATE_WIDTH = 100    # Minimum crop width in pixels (increased for better OCR)
-MIN_PLATE_HEIGHT = 30    # Minimum crop height in pixels (increased for better OCR)
-MIN_PLATE_AREA = 3000    # Minimum area in pixels (filters out tiny detections)
+MIN_ASPECT_RATIO = 1.2   # w/h minimum (standard plate ratio)
+MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
+MIN_PLATE_WIDTH = 40     # Minimum crop width in pixels (lowered to catch more plates)
+MIN_PLATE_HEIGHT = 12    # Minimum crop height in pixels (lowered to catch more plates)
+MIN_PLATE_AREA = 480     # Minimum area in pixels (lowered to catch more plates)
 
 # ---- OCR Confidence Threshold ----
 OCR_MIN_CONFIDENCE = 0.3  # Lowered since we have stricter geometric filters
@@ -336,10 +336,10 @@ def is_garbage_text(text: str) -> bool:
     if unique_ratio < 0.25 and len(text) >= 6:
         return True
 
-    # Must have at least 1 letter and 1 digit (relaxed from 2+ letters)
+    # Must have at least 2 letters and 1 digit
     letter_count = sum(1 for c in text if c.isalpha())
     digit_count = sum(1 for c in text if c.isdigit())
-    if letter_count < 1 or digit_count < 1:
+    if letter_count < 2 or digit_count < 1:
         return True
 
     return False

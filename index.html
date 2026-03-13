@@ -56,7 +56,7 @@
         </div>
 
         <!-- Upload Traffic Video -->
-        <div class="section-header">
+        <div class="section-header" style="justify-content: center; gap: 12px;">
           <h2>Upload Traffic Video</h2>
           <span class="badge primary" style="gap:4px;">
             <span class="material-symbols-outlined" style="font-size:14px">videocam</span>
@@ -70,10 +70,6 @@
             <span class="material-symbols-outlined upload-icon">cloud_upload</span>
             <p class="upload-title">Drag & drop your traffic video here</p>
             <p class="upload-subtitle">or click to browse • MP4, MOV, WEBM • Max 1 minute</p>
-            <button class="btn-primary" id="uploadBtn" style="margin-top:16px;">
-              <span class="material-symbols-outlined" style="font-size:18px">upload_file</span>
-              Upload Traffic Video
-            </button>
           </div>
           <input type="file" id="videoInput" accept="video/mp4,video/mov,video/webm,video/quicktime" hidden />
         </div>
@@ -178,7 +174,6 @@
     // ============ Video Upload Logic ============
     const uploadZone = document.getElementById('uploadZone');
     const videoInput = document.getElementById('videoInput');
-    const uploadBtn = document.getElementById('uploadBtn');
     const uploadError = document.getElementById('uploadError');
     const errorText = document.getElementById('errorText');
     const videoPreview = document.getElementById('videoPreview');
@@ -196,11 +191,8 @@
     let uploadedFile = null;
 
     // Click to upload
-    uploadBtn.addEventListener('click', () => videoInput.click());
-    uploadZone.addEventListener('click', (e) => {
-      if (e.target !== uploadBtn && !uploadBtn.contains(e.target)) {
-        videoInput.click();
-      }
+    uploadZone.addEventListener('click', () => {
+      videoInput.click();
     });
 
     // Drag and drop
@@ -315,8 +307,14 @@
 
         if (!data.detections || data.detections.length === 0) {
           showNoDetections();
+          // Clear old detections from localStorage
+          localStorage.removeItem('roadvision_detections');
           return;
         }
+
+        // Save detections to localStorage for detections page
+        localStorage.setItem('roadvision_detections', JSON.stringify(data.detections));
+        console.log(`Saved ${data.detections.length} detections to localStorage`);
 
         displayResults(data.detections);
 
