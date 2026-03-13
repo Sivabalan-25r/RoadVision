@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — Live Monitoring</title>
-  <meta name="description" content="RoadVision live traffic camera monitoring with real-time vehicle detection and bounding box overlays." />
+  <meta name="description"
+    content="RoadVision live traffic camera monitoring with real-time vehicle detection and bounding box overlays." />
   <link rel="stylesheet" href="styles.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
 </head>
+
 <body>
   <div class="app-layout">
     <!-- Sidebar Slot -->
@@ -30,23 +34,44 @@
         </div>
 
         <!-- Video Feed Viewer -->
-        <div class="frame-viewer" id="monitorViewer" style="margin-bottom:32px;" data-glare="false">
+        <div class="frame-viewer" id="monitorViewer" style="margin-bottom:32px;">
           <img src="assets/images/traffic-frame.jpg" alt="Live traffic camera feed — Main Expressway" />
 
           <!-- Canvas Overlay for Dynamic Bounding Boxes -->
-          <canvas id="bboxCanvas"></canvas>
+          <canvas id="bboxCanvas"
+            style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
 
           <!-- Camera Info -->
           <div class="cam-info">
-            <p class="cam-name">CAM-084: Main Expressway North</p>
+            <p class="cam-name" id="camName">CAM-084: Main Expressway North</p>
             <p class="cam-time">1080p • 60fps</p>
           </div>
 
           <!-- Playback Controls -->
           <div class="playback-controls">
-            <button class="material-symbols-outlined">volume_up</button>
-            <button class="material-symbols-outlined" style="font-size:36px">pause_circle</button>
+            <button class="material-symbols-outlined" id="toggleWebcam">videocam</button>
+            <button class="material-symbols-outlined" style="font-size:36px" id="toggleDetection">play_circle</button>
             <button class="material-symbols-outlined">fullscreen</button>
+          </div>
+
+          <!-- Live Detection Stats Overlay -->
+          <div
+            style="position:absolute; top:16px; right:16px; background:rgba(0,0,0,0.8); backdrop-filter:blur(10px); padding:12px 16px; border-radius:8px; display:none;"
+            id="liveStats">
+            <div style="display:flex; gap:20px; align-items:center;">
+              <div style="text-align:center;">
+                <div style="font-size:24px; font-weight:700; color:#22C55E;" id="legalCount">0</div>
+                <div style="font-size:11px; color:#fff; opacity:0.8;">LEGAL</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:24px; font-weight:700; color:#EF4444;" id="illegalCount">0</div>
+                <div style="font-size:11px; color:#fff; opacity:0.8;">ILLEGAL</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:24px; font-weight:700; color:#3B82F6;" id="totalCount">0</div>
+                <div style="font-size:11px; color:#fff; opacity:0.8;">TOTAL</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -55,7 +80,8 @@
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
               <span class="stat-label" style="margin-bottom:0">Plates Scanned</span>
-              <span class="material-symbols-outlined" style="color:var(--primary); background:var(--primary-glow); padding:8px; border-radius:var(--radius-md);">directions_car</span>
+              <span class="material-symbols-outlined"
+                style="color:var(--primary); background:var(--primary-glow); padding:8px; border-radius:var(--radius-md);">directions_car</span>
             </div>
             <div class="stat-row">
               <span class="stat-value">1,284</span>
@@ -70,7 +96,8 @@
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
               <span class="stat-label" style="margin-bottom:0">Plate Violations</span>
-              <span class="material-symbols-outlined" style="color:var(--alert); background:var(--alert-glow); padding:8px; border-radius:var(--radius-md);">warning</span>
+              <span class="material-symbols-outlined"
+                style="color:var(--alert); background:var(--alert-glow); padding:8px; border-radius:var(--radius-md);">warning</span>
             </div>
             <div class="stat-row">
               <span class="stat-value">22</span>
@@ -107,7 +134,8 @@
                   <td style="color:var(--text-muted)">14:23:45</td>
                   <td><span class="badge success">Valid</span></td>
                   <td style="text-align:right">
-                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
+                    <button class="icon-btn"><span class="material-symbols-outlined"
+                        style="font-size:20px">info</span></button>
                   </td>
                 </tr>
                 <tr>
@@ -116,7 +144,8 @@
                   <td style="color:var(--text-muted)">14:22:12</td>
                   <td><span class="badge alert">Character Manipulation</span></td>
                   <td style="text-align:right">
-                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
+                    <button class="icon-btn"><span class="material-symbols-outlined"
+                        style="font-size:20px">info</span></button>
                   </td>
                 </tr>
                 <tr>
@@ -125,7 +154,8 @@
                   <td style="color:var(--text-muted)">14:21:05</td>
                   <td><span class="badge success">Valid</span></td>
                   <td style="text-align:right">
-                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
+                    <button class="icon-btn"><span class="material-symbols-outlined"
+                        style="font-size:20px">info</span></button>
                   </td>
                 </tr>
               </tbody>
@@ -143,11 +173,29 @@
     const canvas = document.getElementById('bboxCanvas');
     const ctx = canvas.getContext('2d');
     const viewer = document.getElementById('monitorViewer');
+    const webcamVideo = document.getElementById('webcamVideo');
+    const staticImage = document.getElementById('staticImage');
+    const toggleWebcamBtn = document.getElementById('toggleWebcam');
+    const toggleDetectionBtn = document.getElementById('toggleDetection');
+    const camName = document.getElementById('camName');
+    const liveStats = document.getElementById('liveStats');
+    const legalCountEl = document.getElementById('legalCount');
+    const illegalCountEl = document.getElementById('illegalCount');
+    const totalCountEl = document.getElementById('totalCount');
+
+    let webcamStream = null;
+    let isWebcamActive = false;
+    let isDetectionActive = false;
+    let detectionInterval = null;
+    let seenPlates = new Set();
+    let legalCount = 0;
+    let illegalCount = 0;
 
     // Colors matching the design system
     const COLORS = {
-      valid:     { stroke: '#22C55E', fill: 'rgba(34,197,94,.15)', text: '#22C55E' },
-      violation: { stroke: '#EF4444', fill: 'rgba(239,68,68,.15)', text: '#EF4444' }
+      valid: { stroke: '#22C55E', fill: 'rgba(34,197,94,.15)', text: '#22C55E' },
+      violation: { stroke: '#EF4444', fill: 'rgba(239,68,68,.15)', text: '#EF4444' },
+      detecting: { stroke: '#3B82F6', fill: 'rgba(59,130,246,.15)', text: '#3B82F6' }
     };
 
     // ---- Canvas sizing ----
@@ -155,7 +203,6 @@
       const rect = viewer.getBoundingClientRect();
       canvas.width = rect.width;
       canvas.height = rect.height;
-      // Redraw after resize
       if (currentDetections.length) drawDetections(currentDetections);
     }
 
@@ -164,8 +211,133 @@
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('load', () => {
       resizeCanvas();
-      fetchDetections();
+      fetchMockDetections();
     });
+
+    // ---- Webcam Control ----
+    toggleWebcamBtn.addEventListener('click', async () => {
+      if (!isWebcamActive) {
+        try {
+          webcamStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 1280, height: 720 }
+          });
+          webcamVideo.srcObject = webcamStream;
+          webcamVideo.style.display = 'block';
+          staticImage.style.display = 'none';
+          isWebcamActive = true;
+          toggleWebcamBtn.textContent = 'videocam_off';
+          camName.textContent = 'Webcam Feed';
+        } catch (err) {
+          alert('Could not access webcam: ' + err.message);
+        }
+      } else {
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(track => track.stop());
+        }
+        webcamVideo.style.display = 'none';
+        staticImage.style.display = 'block';
+        isWebcamActive = false;
+        toggleWebcamBtn.textContent = 'videocam';
+        camName.textContent = 'CAM-084: Main Expressway North';
+        stopDetection();
+      }
+    });
+
+    // ---- Detection Control ----
+    toggleDetectionBtn.addEventListener('click', () => {
+      if (!isDetectionActive) {
+        startDetection();
+        toggleDetectionBtn.textContent = 'pause_circle';
+      } else {
+        stopDetection();
+        toggleDetectionBtn.textContent = 'play_circle';
+      }
+    });
+
+    function startDetection() {
+      isDetectionActive = true;
+      liveStats.style.display = 'block';
+      seenPlates.clear();
+      legalCount = 0;
+      illegalCount = 0;
+      updateStats();
+
+      if (isWebcamActive) {
+        // Process webcam frames
+        detectionInterval = setInterval(processWebcamFrame, 1000); // Every 1 second
+      } else {
+        // Use mock detections for static image
+        detectionInterval = setInterval(fetchMockDetections, 3000);
+      }
+    }
+
+    function stopDetection() {
+      isDetectionActive = false;
+      liveStats.style.display = 'none';
+      if (detectionInterval) {
+        clearInterval(detectionInterval);
+        detectionInterval = null;
+      }
+      currentDetections = [];
+      drawDetections(currentDetections);
+    }
+
+    function updateStats() {
+      legalCountEl.textContent = legalCount;
+      illegalCountEl.textContent = illegalCount;
+      totalCountEl.textContent = legalCount + illegalCount;
+    }
+
+    // ---- Process Webcam Frame ----
+    async function processWebcamFrame() {
+      if (!isWebcamActive || !webcamVideo.videoWidth) return;
+
+      try {
+        // Capture frame from video
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = webcamVideo.videoWidth;
+        tempCanvas.height = webcamVideo.videoHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(webcamVideo, 0, 0);
+
+        // Convert to blob
+        const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.8));
+
+        // Send to backend
+        const formData = new FormData();
+        formData.append('file', blob, 'frame.jpg');
+
+        const res = await fetch('http://localhost:8000/api/process-frame', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) throw new Error('Backend error');
+
+        const data = await res.json();
+        currentDetections = data.detections || [];
+
+        // Update counts for new plates
+        currentDetections.forEach(det => {
+          if (det.detected_plate && det.detected_plate !== 'Detecting...') {
+            if (!seenPlates.has(det.detected_plate)) {
+              seenPlates.add(det.detected_plate);
+              if (det.violation) {
+                illegalCount++;
+              } else {
+                legalCount++;
+              }
+              updateStats();
+            }
+          }
+        });
+
+        drawDetections(currentDetections);
+
+      } catch (err) {
+        console.error('Frame processing error:', err);
+      }
+    }
 
     // ---- Drawing logic ----
     function drawDetections(detections) {
@@ -185,7 +357,8 @@
         const bh = (det.bbox[3] / 100) * h;
 
         const isViolation = !!det.violation;
-        const palette = isViolation ? COLORS.violation : COLORS.valid;
+        const isDetecting = det.detected_plate === 'Detecting...';
+        const palette = isDetecting ? COLORS.detecting : (isViolation ? COLORS.violation : COLORS.valid);
 
         // Fill
         ctx.fillStyle = palette.fill;
@@ -193,80 +366,87 @@
 
         // Stroke
         ctx.strokeStyle = palette.stroke;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.strokeRect(x, y, bw, bh);
 
         // Label background
         const label = det.detected_plate || 'Unknown';
-        ctx.font = 'bold 12px Inter, sans-serif';
-        const textMetrics = ctx.measureText(label);
-        const labelW = textMetrics.width + 12;
-        const labelH = 20;
-        const labelX = x;
-        const labelY = y - labelH;
+        const status = isDetecting ? 'DETECTING' : (isViolation ? `ILLEGAL: ${det.violation}` : 'LEGAL');
 
+        ctx.font = 'bold 14px Inter, sans-serif';
+        const textMetrics = ctx.measureText(label);
+        const statusMetrics = ctx.measureText(status);
+        const labelW = Math.max(textMetrics.width, statusMetrics.width) + 16;
+        const labelH = 44; // Taller to fit two lines
+        const labelX = x;
+        const labelY = y - labelH - 2;
+
+        // Draw label background with rounded corners
         ctx.fillStyle = palette.stroke;
         ctx.beginPath();
-        ctx.roundRect(labelX, labelY, labelW, labelH, [3, 3, 0, 0]);
+        ctx.roundRect(labelX, labelY, labelW, labelH, [4, 4, 0, 0]);
         ctx.fill();
 
-        // Label text
+        // Draw plate number
         ctx.fillStyle = '#ffffff';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, labelX + 6, labelY + labelH / 2);
+        ctx.font = 'bold 14px Inter, sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.fillText(label, labelX + 8, labelY + 6);
+
+        // Draw status (LEGAL/ILLEGAL)
+        ctx.font = 'bold 11px Inter, sans-serif';
+        ctx.fillText(status, labelX + 8, labelY + 24);
+
+        // Add icon
+        if (!isDetecting) {
+          const icon = isViolation ? '⚠' : '✓';
+          ctx.font = 'bold 16px Arial';
+          ctx.fillText(icon, labelX + labelW - 24, labelY + 12);
+        }
       });
     }
 
-    // ---- Fetch detections from backend ----
-    async function fetchDetections() {
+    // ---- Fetch mock detections (for static image) ----
+    async function fetchMockDetections() {
       try {
-        const res = await fetch('/api/live-detections');
+        const res = await fetch('http://localhost:8000/api/live-detections');
         if (!res.ok) throw new Error('Backend unavailable');
         const data = await res.json();
         currentDetections = data.detections || [];
       } catch (err) {
-        // Fallback: use mock detections for demo
+        // Fallback: use hardcoded mock detections
         currentDetections = getMockDetections();
       }
       drawDetections(currentDetections);
     }
 
-    // Poll for new detections every 3 seconds
-    setInterval(fetchDetections, 3000);
-
     // ---- Mock data (used when backend is offline) ----
     function getMockDetections() {
       return [
         {
-          detected_plate: 'ABC-1234',
-          correct_plate: 'ABC 1234',
+          detected_plate: 'WB65D18753',
+          correct_plate: 'WB 65 D 18753',
           violation: null,
           confidence: 0.97,
-          bbox: [22, 25, 14, 18]
+          bbox: [35, 45, 18, 8]
         },
         {
-          detected_plate: 'LMN-5542',
-          correct_plate: 'LMN 5542',
+          detected_plate: 'MH12AB1234',
+          correct_plate: 'MH 12 AB 1234',
           violation: null,
           confidence: 0.95,
-          bbox: [35, 48, 12, 16]
+          bbox: [60, 30, 16, 7]
         },
         {
-          detected_plate: 'XYZ-9876',
-          correct_plate: 'XYZ 9876',
+          detected_plate: 'TN1OAB5678',
+          correct_plate: 'TN10AB5678',
           violation: 'Character Manipulation',
           confidence: 0.91,
-          bbox: [62, 32, 16, 20]
-        },
-        {
-          detected_plate: 'PQR-7788',
-          correct_plate: 'PQR 7788',
-          violation: null,
-          confidence: 0.93,
-          bbox: [56, 60, 14, 16]
+          bbox: [25, 55, 17, 8]
         }
       ];
     }
   </script>
 </body>
+
 </html>

@@ -27,13 +27,14 @@ PLATE_MODEL_PATH = os.path.join(
 DETECTION_CONF = 0.3  # YOLO detection confidence threshold (lowered to catch more plates)
 
 # ---- Geometric Filter Thresholds (tuned for Indian roads) ----
-MIN_ASPECT_RATIO = 1.2   # w/h minimum (more lenient for two-wheeler plates)
-MAX_ASPECT_RATIO = 7.0   # w/h maximum (more lenient for wide plates)
-MIN_PLATE_WIDTH = 80     # Minimum crop width in pixels (increased for OCR quality)
-MIN_PLATE_HEIGHT = 25    # Minimum crop height in pixels (increased for OCR quality)
+MIN_ASPECT_RATIO = 1.5   # w/h minimum (standard plate ratio)
+MAX_ASPECT_RATIO = 6.0   # w/h maximum (wide plates)
+MIN_PLATE_WIDTH = 100    # Minimum crop width in pixels (increased for better OCR)
+MIN_PLATE_HEIGHT = 30    # Minimum crop height in pixels (increased for better OCR)
+MIN_PLATE_AREA = 3000    # Minimum area in pixels (filters out tiny detections)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.4  # Lowered to catch more plates (was too strict)
+OCR_MIN_CONFIDENCE = 0.3  # Lowered since we have stricter geometric filters
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 6
@@ -95,7 +96,8 @@ def passes_geometric_filter(
 
     Rejects if:
       - Aspect ratio (w/h) outside [1.5, 6.0]
-      - Width < 60 or height < 18
+      - Width < 100 or height < 30
+      - Area < 3000 pixels
     """
     w = x2 - x1
     h = y2 - y1
@@ -109,6 +111,10 @@ def passes_geometric_filter(
 
     if w < MIN_PLATE_WIDTH or h < MIN_PLATE_HEIGHT:
         return False
+    
+    area = w * h
+    if area < MIN_PLATE_AREA:
+        return False
 
     return True
 
@@ -117,15 +123,15 @@ def passes_geometric_filter(
 
 def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     """
-    Preprocess a plate crop for OCR recognition with ANPR-optimized pipeline.
+    Preprocess a plate crop for OCR recognition with adaptive pipeline.
 
     Steps:
       1. Convert to grayscale
-      2. Upscale 3x for better character resolution
-      3. CLAHE for contrast enhancement
-      4. Slight Gaussian blur to reduce noise
-      5. OTSU threshold (binarization)
-      6. Resize to larger OCR input size (320×120 instead of 160×40)
+      2. Adaptive upscaling based on size
+      3. Denoise with bilateral filter
+      4. CLAHE for contrast enhancement
+      5. Adaptive threshold (better than OTSU for varied lighting)
+      6. Resize to OCR-friendly size
     """
     # Grayscale
     if len(plate_crop.shape) == 3:
@@ -133,23 +139,25 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     else:
         gray = plate_crop.copy()
 
-    # Upscale 3x before processing to preserve character details
-    gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    # Adaptive upscaling - only if image is small
+    h, w = gray.shape
+    if w < 200 or h < 60:
+        scale = max(200 / w, 60 / h)
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    
+    # Denoise while preserving edges
+    denoised = cv2.bilateralFilter(gray, 9, 75, 75)
 
-    # CLAHE for contrast enhancement (better than bilateral filter)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    gray = clahe.apply(gray)
+    # CLAHE for contrast enhancement
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(denoised)
 
-    # Slight Gaussian blur to reduce noise
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # OTSU threshold
-    _, thresh = cv2.threshold(
-        gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    # Adaptive threshold (better than OTSU for plates with varied lighting)
+    thresh = cv2.adaptiveThreshold(
+        enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
     )
 
-    # Resize to larger OCR input size (320×120 instead of 160×40)
-    # This preserves more character detail
+    # Resize to standard OCR input size
     plate_processed = cv2.resize(thresh, (320, 120), interpolation=cv2.INTER_CUBIC)
 
     return plate_processed
@@ -317,14 +325,10 @@ def is_garbage_text(text: str) -> bool:
     if unique_ratio < 0.25 and len(text) >= 6:
         return True
 
-    # Must start with a letter (Indian plates start with state code)
-    if not text[0].isalpha():
-        return True
-
-    # Must have at least 2 letters and 1 digit (more lenient)
+    # Must have at least 1 letter and 1 digit (relaxed from 2+ letters)
     letter_count = sum(1 for c in text if c.isalpha())
     digit_count = sum(1 for c in text if c.isdigit())
-    if letter_count < 2 or digit_count < 1:
+    if letter_count < 1 or digit_count < 1:
         return True
 
     return False
