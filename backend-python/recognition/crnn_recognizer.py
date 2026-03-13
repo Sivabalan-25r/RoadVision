@@ -11,6 +11,7 @@ import logging
 import os
 from typing import Tuple, Optional
 
+import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -256,15 +257,16 @@ def preprocess_for_crnn(plate_image: np.ndarray) -> Optional["torch.Tensor"]:
         return None
 
 
-def recognize_plate(plate_image: np.ndarray) -> Tuple[str, float]:
+def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Tuple[str, float]:
     """
-    Recognize text from a preprocessed plate crop image.
+    Recognize text from a plate crop image.
 
     Uses CRNN if trained weights are available (crnn.pth).
-    Falls back to PaddleOCR if CRNN is unavailable.
+    Falls back to PaddleOCR/Tesseract if CRNN is unavailable.
 
     Args:
-        plate_image: BGR or grayscale numpy array of the plate crop.
+        plate_image: BGR plate crop (for PaddleOCR).
+        preprocessed_image: Preprocessed grayscale plate (for Tesseract).
 
     Returns:
         (recognized_text, confidence) tuple.
@@ -291,14 +293,17 @@ def recognize_plate(plate_image: np.ndarray) -> Tuple[str, float]:
             logger.error(f"CRNN recognition error: {e}")
             return "", 0.0
 
-    # Fallback: use PaddleOCR when CRNN weights are not available
-    # PaddleOCR needs BGR/RGB images, convert grayscale to BGR if needed
-    if len(plate_image.shape) == 2:
-        plate_image_bgr = cv2.cvtColor(plate_image, cv2.COLOR_GRAY2BGR)
-    else:
-        plate_image_bgr = plate_image
+    # Fallback: use PaddleOCR/Tesseract
+    # Use preprocessed image for Tesseract if available
+    ocr_input = preprocessed_image if preprocessed_image is not None else plate_image
     
-    return _paddleocr_recognize(plate_image_bgr)
+    # PaddleOCR needs BGR/RGB images, convert grayscale to BGR if needed
+    if len(ocr_input.shape) == 2:
+        ocr_input_bgr = cv2.cvtColor(ocr_input, cv2.COLOR_GRAY2BGR)
+    else:
+        ocr_input_bgr = ocr_input
+    
+    return _paddleocr_recognize(ocr_input_bgr)
 
 
 # ---- PaddleOCR Fallback (replaces EasyOCR for better Indian plate accuracy) ----
@@ -337,22 +342,22 @@ def _get_paddle_reader():
 def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
     """
     Recognize plate text using PaddleOCR as a fallback.
-    PaddleOCR achieves ~90% accuracy on Indian license plates.
+    If PaddleOCR fails, falls back to Tesseract.
 
     Returns:
         (text, confidence) tuple.
     """
     reader = _get_paddle_reader()
     if reader is None:
-        return "", 0.0
+        return _tesseract_recognize(plate_image)
 
     try:
         # Call OCR without cls parameter for compatibility
         results = reader.ocr(plate_image)
 
         if not results or not results[0]:
-            logger.debug("PaddleOCR returned empty results")
-            return "", 0.0
+            logger.debug("PaddleOCR returned empty results, trying Tesseract")
+            return _tesseract_recognize(plate_image)
 
         # The installed version might return Paddlex dict format or standard list format
         texts = []
@@ -383,8 +388,8 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
                             confidences.append(float(conf))
 
         if not texts:
-            logger.debug("PaddleOCR: No text with sufficient confidence")
-            return "", 0.0
+            logger.debug("PaddleOCR: No text with sufficient confidence, trying Tesseract")
+            return _tesseract_recognize(plate_image)
 
         combined_text = ''.join(texts).strip().upper()
         avg_conf = sum(confidences) / len(confidences)
@@ -392,6 +397,62 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return combined_text, avg_conf
 
     except Exception as e:
-        logger.error(f"PaddleOCR recognition error: {e}", exc_info=True)
+        logger.warning(f"PaddleOCR failed: {e}, falling back to Tesseract")
+        return _tesseract_recognize(plate_image)
+
+
+def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
+    """
+    Fallback OCR using Tesseract.
+    
+    Returns:
+        (text, confidence) tuple.
+    """
+    try:
+        import pytesseract
+        from PIL import Image
+        
+        # Set Tesseract path for Windows
+        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        
+        # Convert numpy array to PIL Image
+        if len(plate_image.shape) == 2:
+            # Grayscale
+            pil_img = Image.fromarray(plate_image)
+        else:
+            # BGR to RGB
+            import cv2
+            rgb = cv2.cvtColor(plate_image, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(rgb)
+        
+        # Configure Tesseract for license plates with character whitelist
+        custom_config = r'--oem 3 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        
+        # Get text and confidence
+        data = pytesseract.image_to_data(pil_img, config=custom_config, output_type=pytesseract.Output.DICT)
+        
+        # Extract text with confidence
+        texts = []
+        confidences = []
+        for i, conf in enumerate(data['conf']):
+            if conf > 50 and data['text'][i].strip():
+                texts.append(data['text'][i].strip())
+                confidences.append(conf / 100.0)
+        
+        if not texts:
+            logger.debug("Tesseract: No text detected")
+            return "", 0.0
+        
+        combined_text = ''.join(texts).upper()
+        avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+        
+        logger.info(f"Tesseract SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
+        return combined_text, avg_conf
+        
+    except ImportError:
+        logger.error("Tesseract not available. Install: pip install pytesseract pillow")
+        return "", 0.0
+    except Exception as e:
+        logger.error(f"Tesseract recognition error: {e}")
         return "", 0.0
 

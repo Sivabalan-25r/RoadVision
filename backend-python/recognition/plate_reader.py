@@ -29,11 +29,11 @@ DETECTION_CONF = 0.3  # YOLO detection confidence threshold (lowered to catch mo
 # ---- Geometric Filter Thresholds (tuned for Indian roads) ----
 MIN_ASPECT_RATIO = 1.2   # w/h minimum (more lenient for two-wheeler plates)
 MAX_ASPECT_RATIO = 7.0   # w/h maximum (more lenient for wide plates)
-MIN_PLATE_WIDTH = 40     # Minimum crop width in pixels (reduced)
-MIN_PLATE_HEIGHT = 12    # Minimum crop height in pixels (reduced)
+MIN_PLATE_WIDTH = 80     # Minimum crop width in pixels (increased for OCR quality)
+MIN_PLATE_HEIGHT = 25    # Minimum crop height in pixels (increased for OCR quality)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.5  # Lowered to catch more plates
+OCR_MIN_CONFIDENCE = 0.4  # Lowered to catch more plates (was too strict)
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 6
@@ -117,13 +117,15 @@ def passes_geometric_filter(
 
 def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     """
-    Preprocess a plate crop for OCR recognition.
+    Preprocess a plate crop for OCR recognition with ANPR-optimized pipeline.
 
     Steps:
       1. Convert to grayscale
-      2. Bilateral filter (noise reduction, edge preservation)
-      3. OTSU threshold (binarization)
-      4. Resize to 160×40 for optimal OCR input
+      2. Upscale 3x for better character resolution
+      3. CLAHE for contrast enhancement
+      4. Slight Gaussian blur to reduce noise
+      5. OTSU threshold (binarization)
+      6. Resize to larger OCR input size (320×120 instead of 160×40)
     """
     # Grayscale
     if len(plate_crop.shape) == 3:
@@ -131,16 +133,24 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     else:
         gray = plate_crop.copy()
 
-    # Bilateral filter: reduce noise while keeping edges sharp
-    filtered = cv2.bilateralFilter(gray, 11, 17, 17)
+    # Upscale 3x before processing to preserve character details
+    gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+
+    # CLAHE for contrast enhancement (better than bilateral filter)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+
+    # Slight Gaussian blur to reduce noise
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
     # OTSU threshold
     _, thresh = cv2.threshold(
-        filtered, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
 
-    # Resize to standard OCR input size
-    plate_processed = cv2.resize(thresh, (160, 40))
+    # Resize to larger OCR input size (320×120 instead of 160×40)
+    # This preserves more character detail
+    plate_processed = cv2.resize(thresh, (320, 120), interpolation=cv2.INTER_CUBIC)
 
     return plate_processed
 
@@ -149,6 +159,7 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
 
 def detect_plates(
     frame: np.ndarray,
+    frame_number: int = 0,
 ) -> List[dict]:
     """
     Detect license plates in a single frame using the dedicated
@@ -159,7 +170,7 @@ def detect_plates(
 
     Returns list of dicts with:
       - 'bbox': [x, y, w, h]
-      - 'crop': preprocessed plate image (numpy, 160×40)
+      - 'crop': preprocessed plate image (numpy, 320×120)
       - 'raw_crop': original BGR plate crop
       - 'confidence': YOLO detection confidence
     """
@@ -172,6 +183,12 @@ def detect_plates(
     # Get class name mapping from model
     class_names = model.names if hasattr(model, 'names') else {}
 
+    # Create debug directory
+    import os
+    debug_dir = os.path.join(os.path.dirname(__file__), '..', 'debug_plates')
+    os.makedirs(debug_dir, exist_ok=True)
+
+    detection_idx = 0
     for result in results:
         boxes = result.boxes
         if boxes is None:
@@ -182,16 +199,20 @@ def detect_plates(
             conf = float(box.conf[0])
 
             # Only keep 'license_plate' class detections
-            # For single-class plate detector models, class 0 is the plate
-            # Handle cases where class names are stringified lists like "['plate']"
             cls_name = class_names.get(cls_id, '').lower()
-            cls_name = re.sub(r"[^a-z0-9]", "", cls_name) # Strip punctuation and spaces
+            cls_name = re.sub(r"[^a-z0-9]", "", cls_name)
             if cls_name not in ('licenseplate', 'plate', ''):
-                # If the model has named classes and this isn't a plate, skip
                 if class_names:
                     continue
 
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+
+            # Clamp coordinates to frame boundaries
+            h_img, w_img = frame.shape[:2]
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(w_img, x2)
+            y2 = min(h_img, y2)
 
             # Apply geometric filters
             if not passes_geometric_filter(x1, y1, x2, y2):
@@ -209,8 +230,17 @@ def detect_plates(
             if raw_crop.size == 0:
                 continue
 
-            # Preprocess for recognition (grayscale → bilateral → OTSU → 160×40)
+            # Save debug image
+            debug_path = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_raw.png')
+            cv2.imwrite(debug_path, raw_crop)
+            logger.info(f"Saved debug plate: {debug_path} (size: {raw_crop.shape})")
+
+            # Preprocess for recognition (upscale → CLAHE → blur → OTSU → 320×120)
             processed = preprocess_plate_crop(raw_crop)
+
+            # Save preprocessed debug image
+            debug_path_proc = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_processed.png')
+            cv2.imwrite(debug_path_proc, processed)
 
             w = x2 - x1
             h = y2 - y1
@@ -220,10 +250,12 @@ def detect_plates(
                 'raw_crop': raw_crop,
                 'confidence': conf,
             })
+            detection_idx += 1
 
     if filtered_count > 0:
         logger.debug(f"Filtered {filtered_count} plates by geometric constraints")
 
+    logger.info(f"Frame {frame_number}: Detected {len(detections)} valid plates")
     return detections
 
 
@@ -308,18 +340,19 @@ def normalize_plate(text: str) -> str:
 
 # ---- Public API ----
 
-def read_plate(plate_image: np.ndarray) -> Optional[str]:
+def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Optional[str]:
     """
-    Read text from a plate crop image using CRNN/PaddleOCR.
+    Read text from a plate crop image using CRNN/PaddleOCR/Tesseract.
 
     Pipeline:
       1. OCR recognition → raw text + confidence
-      2. Confidence filter (≥ 0.5)
+      2. Confidence filter (≥ 0.4)
       3. Clean text
       4. Garbage rejection
 
     Args:
-        plate_image: Raw BGR plate crop (not preprocessed).
+        plate_image: Raw BGR plate crop (for PaddleOCR).
+        preprocessed_image: Preprocessed grayscale plate (for Tesseract).
 
     Returns:
         Cleaned plate text or None if unreadable/garbage.
@@ -328,7 +361,9 @@ def read_plate(plate_image: np.ndarray) -> Optional[str]:
         return None
 
     try:
-        raw_text, confidence = recognize_plate(plate_image)
+        # Use preprocessed image for Tesseract if available
+        ocr_image = preprocessed_image if preprocessed_image is not None else plate_image
+        raw_text, confidence = recognize_plate(plate_image, ocr_image)
 
         if not raw_text:
             logger.debug("OCR returned empty text")
@@ -339,7 +374,7 @@ def read_plate(plate_image: np.ndarray) -> Optional[str]:
             return None
 
         cleaned = clean_text(raw_text)
-        logger.debug(f"OCR: '{raw_text}' → cleaned: '{cleaned}' (conf: {confidence:.2f})")
+        logger.info(f"OCR: '{raw_text}' → cleaned: '{cleaned}' (conf: {confidence:.2f})")
 
         if is_garbage_text(cleaned):
             logger.debug(f"Rejected as garbage: '{cleaned}'")
@@ -352,7 +387,7 @@ def read_plate(plate_image: np.ndarray) -> Optional[str]:
         return None
 
 
-def get_read_confidence(plate_image: np.ndarray) -> float:
+def get_read_confidence(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> float:
     """
     Get the OCR recognition confidence for a plate image.
 
@@ -363,7 +398,8 @@ def get_read_confidence(plate_image: np.ndarray) -> float:
         return 0.0
 
     try:
-        _, confidence = recognize_plate(plate_image)
+        ocr_image = preprocessed_image if preprocessed_image is not None else plate_image
+        _, confidence = recognize_plate(plate_image, ocr_image)
         return confidence
     except Exception as e:
         logger.error(f"OCR confidence error: {e}")
