@@ -25,40 +25,36 @@
           <div class="stat-card">
             <p class="stat-label">Plates Scanned</p>
             <div class="stat-row">
-              <span class="stat-value">14,284</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">trending_up</span>
-                12%
+              <span class="stat-value" id="platesScanned">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Total detected
               </span>
             </div>
           </div>
           <div class="stat-card">
             <p class="stat-label">Illegal Plates Found</p>
             <div class="stat-row">
-              <span class="stat-value">28</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">trending_up</span>
-                2%
+              <span class="stat-value" id="illegalPlates">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Violations
               </span>
             </div>
           </div>
           <div class="stat-card">
             <p class="stat-label">Valid Plates</p>
             <div class="stat-row">
-              <span class="stat-value">14,256</span>
-              <span class="stat-trend down">
-                <span class="material-symbols-outlined">trending_down</span>
-                1%
+              <span class="stat-value" id="validPlates">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Legal format
               </span>
             </div>
           </div>
           <div class="stat-card">
             <p class="stat-label">Detection Accuracy</p>
             <div class="stat-row">
-              <span class="stat-value">98.4%</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">trending_up</span>
-                0.5%
+              <span class="stat-value" id="detectionAccuracy">--</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Average confidence
               </span>
             </div>
           </div>
@@ -184,6 +180,40 @@
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
   <script>
+    // ============ Load Real Stats from localStorage ============
+    function loadDashboardStats() {
+      try {
+        const detectionsData = localStorage.getItem('roadvision_detections');
+        
+        if (!detectionsData) {
+          // No data yet - keep zeros
+          return;
+        }
+
+        const detections = JSON.parse(detectionsData);
+        const totalPlates = detections.length;
+        const illegalPlates = detections.filter(d => d.violation).length;
+        const validPlates = totalPlates - illegalPlates;
+        
+        // Calculate average confidence
+        const avgConfidence = totalPlates > 0 
+          ? (detections.reduce((sum, d) => sum + (d.confidence || 0), 0) / totalPlates * 100).toFixed(1) + '%'
+          : '--';
+
+        // Update stat cards
+        document.getElementById('platesScanned').textContent = totalPlates.toLocaleString();
+        document.getElementById('illegalPlates').textContent = illegalPlates.toLocaleString();
+        document.getElementById('validPlates').textContent = validPlates.toLocaleString();
+        document.getElementById('detectionAccuracy').textContent = avgConfidence;
+
+      } catch (e) {
+        console.error('Error loading dashboard stats:', e);
+      }
+    }
+
+    // Load stats on page load
+    window.addEventListener('load', loadDashboardStats);
+
     // ============ Video Upload Logic ============
     const uploadZone = document.getElementById('uploadZone');
     const videoInput = document.getElementById('videoInput');

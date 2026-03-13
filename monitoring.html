@@ -194,8 +194,22 @@
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('load', () => {
       resizeCanvas();
-      // Don't show mock detections on load - wait for user to start detection
+      // Load existing detection count from localStorage
+      loadExistingDetectionCount();
     });
+
+    // ---- Load Existing Detection Count ----
+    function loadExistingDetectionCount() {
+      try {
+        const existingData = localStorage.getItem('roadvision_detections');
+        if (existingData) {
+          const detections = JSON.parse(existingData);
+          console.log(`Found ${detections.length} existing detections in localStorage`);
+        }
+      } catch (e) {
+        console.error('Error loading existing detections:', e);
+      }
+    }
 
     // ---- Webcam Control ----
     toggleWebcamBtn.addEventListener('click', async () => {
@@ -378,6 +392,9 @@
                 time: timeStr
               });
               
+              // Save to localStorage for detections and history pages
+              saveDetectionToStorage(det);
+              
               if (det.violation) {
                 illegalCount++;
               } else {
@@ -394,6 +411,63 @@
 
       } catch (err) {
         console.error('Frame processing error:', err);
+      }
+    }
+
+    // ---- Save Detection to localStorage ----
+    function saveDetectionToStorage(detection) {
+      try {
+        // Get existing detections from localStorage
+        const existingData = localStorage.getItem('roadvision_detections');
+        let detections = existingData ? JSON.parse(existingData) : [];
+        
+        // Add frame number (use timestamp as frame identifier for live monitoring)
+        const detectionWithFrame = {
+          detected_plate: detection.detected_plate,
+          correct_plate: detection.correct_plate || detection.detected_plate,
+          violation: detection.violation,
+          confidence: detection.confidence,
+          frame: Date.now(), // Use timestamp as unique frame identifier
+          bbox: detection.bbox,
+          timestamp: new Date().toISOString(),
+          source: 'live_monitoring'
+        };
+        
+        // Add to array
+        detections.push(detectionWithFrame);
+        
+        // Save back to localStorage
+        localStorage.setItem('roadvision_detections', JSON.stringify(detections));
+        console.log('Saved detection to localStorage:', detection.detected_plate);
+        
+        // Also try to capture and save evidence frame
+        captureAndSaveEvidence(detection);
+        
+      } catch (e) {
+        console.error('Error saving detection to localStorage:', e);
+      }
+    }
+
+    // ---- Capture and Save Evidence Frame ----
+    function captureAndSaveEvidence(detection) {
+      try {
+        // Capture current webcam frame as evidence
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = webcamVideo.videoWidth;
+        tempCanvas.height = webcamVideo.videoHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(webcamVideo, 0, 0);
+        
+        // Convert to data URL
+        const evidenceDataUrl = tempCanvas.toDataURL('image/jpeg', 0.8);
+        
+        // Save evidence using the evidence-store.js component
+        if (typeof saveEvidence === 'function') {
+          saveEvidence(detection, evidenceDataUrl);
+          console.log('Saved evidence frame for:', detection.detected_plate);
+        }
+      } catch (e) {
+        console.error('Error capturing evidence frame:', e);
       }
     }
 
