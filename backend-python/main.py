@@ -150,10 +150,10 @@ async def analyze_video(video: UploadFile = File(...)):
         # Step 1: Process video frames — every 5th frame
         logger.info("Starting YOLO + PaddleOCR pipeline...")
         raw_detections = process_video(temp_path, frame_interval=5)
-        logger.info(f"Raw plate detections: {len(raw_detections)}")
+        logger.info(f"Raw plate detections from YOLO: {len(raw_detections)}")
 
         if not raw_detections:
-            logger.info("No plate candidates detected.")
+            logger.info("No plate candidates detected by YOLO.")
             return JSONResponse(content={"detections": []})
 
         # Step 2: Read plate text via OCR + validate format
@@ -163,8 +163,8 @@ async def analyze_video(video: UploadFile = File(...)):
         logger.info(f"Processing {len(raw_detections)} raw detections...")
 
         for idx, det in enumerate(raw_detections):
-            # Read plate text using PaddleOCR/CRNN - use raw_crop for OCR
-            plate_text = read_plate(det['raw_crop'])
+            # Read plate text using PaddleOCR/CRNN/Tesseract - pass both raw and preprocessed
+            plate_text = read_plate(det['raw_crop'], det['crop'])
             if not plate_text:
                 logger.debug(f"Detection {idx}: OCR failed or returned empty")
                 continue
@@ -188,9 +188,9 @@ async def analyze_video(video: UploadFile = File(...)):
                 f"Violation: {validation.violation or 'None'}"
             )
 
-            # Calculate combined confidence (YOLO + OCR) - use raw_crop for confidence
+            # Calculate combined confidence (YOLO + OCR) - pass both images
             yolo_conf = det['confidence']
-            ocr_conf = get_read_confidence(det['raw_crop'])
+            ocr_conf = get_read_confidence(det['raw_crop'], det['crop'])
             combined_conf = round(
                 (yolo_conf * 0.4 + ocr_conf * 0.6) * validation.confidence_modifier,
                 2,

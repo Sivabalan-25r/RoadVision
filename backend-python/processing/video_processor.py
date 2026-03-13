@@ -47,7 +47,7 @@ def process_video(
 
             if frame_number % frame_interval == 0:
                 # Run YOLO plate detection + geometric filtering + preprocessing
-                plate_detections = detect_plates(frame)
+                plate_detections = detect_plates(frame, frame_number)
 
                 for det in plate_detections:
                     det['frame_number'] = frame_number
