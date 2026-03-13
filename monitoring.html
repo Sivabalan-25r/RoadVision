@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoadVision — Live Monitoring</title>
+  <meta name="description" content="RoadVision live traffic camera monitoring with real-time vehicle detection and bounding box overlays." />
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Slot -->
+    <div id="sidebar-slot"></div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <!-- Header Slot -->
+      <div id="header-slot"></div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Live Badge -->
+        <div class="section-header" style="margin-bottom:20px;">
+          <h2>Camera Feed</h2>
+          <span class="badge-live alert">
+            <span class="pulse"></span>
+            Live
+          </span>
+        </div>
+
+        <!-- Video Feed Viewer -->
+        <div class="frame-viewer" style="margin-bottom:32px;">
+          <img src="assets/images/traffic-frame.jpg" alt="Live traffic camera feed — Main Expressway" />
+
+          <!-- Bounding Boxes -->
+          <div class="bbox valid" style="top:25%; left:22%; width:14%; height:18%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
+              Valid
+            </div>
+          </div>
+          <div class="bbox valid" style="top:48%; left:35%; width:12%; height:16%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
+              Valid
+            </div>
+          </div>
+          <div class="bbox suspicious" style="top:32%; right:22%; width:16%; height:20%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">warning</span>
+              Suspicious
+            </div>
+          </div>
+          <div class="bbox valid" style="bottom:22%; right:30%; width:14%; height:16%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
+              Valid
+            </div>
+          </div>
+
+          <!-- Camera Info -->
+          <div class="cam-info">
+            <p class="cam-name">CAM-084: Main Expressway North</p>
+            <p class="cam-time">1080p • 60fps</p>
+          </div>
+
+          <!-- Playback Controls -->
+          <div class="playback-controls">
+            <button class="material-symbols-outlined">volume_up</button>
+            <button class="material-symbols-outlined" style="font-size:36px">pause_circle</button>
+            <button class="material-symbols-outlined">fullscreen</button>
+          </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="stat-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <span class="stat-label" style="margin-bottom:0">Total Vehicles</span>
+              <span class="material-symbols-outlined" style="color:var(--primary); background:var(--primary-glow); padding:8px; border-radius:var(--radius-md);">directions_car</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-value">1,284</span>
+              <span class="stat-trend up">
+                <span class="material-symbols-outlined">arrow_upward</span>
+                12%
+              </span>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Measured in the last 60 minutes</p>
+          </div>
+          <div class="stat-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <span class="stat-label" style="margin-bottom:0">Valid Registrations</span>
+              <span class="material-symbols-outlined" style="color:var(--success); background:var(--success-glow); padding:8px; border-radius:var(--radius-md);">check_circle</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-value">1,262</span>
+              <span class="stat-trend up">
+                <span class="material-symbols-outlined">arrow_upward</span>
+                10%
+              </span>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Database match successful</p>
+          </div>
+          <div class="stat-card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+              <span class="stat-label" style="margin-bottom:0">Violations</span>
+              <span class="material-symbols-outlined" style="color:var(--alert); background:var(--alert-glow); padding:8px; border-radius:var(--radius-md);">warning</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-value">22</span>
+              <span class="stat-trend down">
+                <span class="material-symbols-outlined">arrow_downward</span>
+                5%
+              </span>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Requires manual review</p>
+          </div>
+        </div>
+
+        <!-- Recent Detection Log -->
+        <div class="card" style="margin-top:32px;">
+          <div class="card-header">
+            <h3>Recent Detection Log</h3>
+            <a href="history.html" style="color:var(--primary); font-size:13px; font-weight:600;">View All Log</a>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Plate ID</th>
+                  <th>Vehicle Type</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                  <th style="text-align:right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="plate-number">ABC-1234</span></td>
+                  <td>Sedan (White)</td>
+                  <td style="color:var(--text-muted)">14:23:45</td>
+                  <td><span class="badge success">Valid</span></td>
+                  <td style="text-align:right">
+                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="plate-number">XYZ-9876</span></td>
+                  <td>SUV (Black)</td>
+                  <td style="color:var(--text-muted)">14:22:12</td>
+                  <td><span class="badge alert">Violation</span></td>
+                  <td style="text-align:right">
+                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="plate-number">LMN-5542</span></td>
+                  <td>Truck (Grey)</td>
+                  <td style="color:var(--text-muted)">14:21:05</td>
+                  <td><span class="badge success">Valid</span></td>
+                  <td style="text-align:right">
+                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="components/loader.js"></script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#2563EB",
+                "background-light": "#f8f6f6",
+                "background-dark": "#0B1220",
+              },
+              fontFamily: {
+                "display": ["Public Sans", "sans-serif"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+      </script>
+<title>RoadVision Dashboard</title>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="flex h-screen overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-white dark:bg-background-dark">
+<div class="p-6 flex items-center gap-3">
+<div class="size-10 rounded-lg bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined">visibility</span>
+</div>
+<div>
+<h1 class="text-lg font-bold leading-none">RoadVision</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400">Traffic Analytics</p>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl bg-primary/10 text-primary font-medium" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">live_tv</span>
+<span>Live Monitoring</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">detection_and_zone</span>
+<span>Detections</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">history</span>
+<span>History</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="w-full flex items-center justify-center gap-2 bg-primary text-white py-2 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm">upgrade</span>
+<span>Upgrade Pro</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col overflow-y-auto">
+<!-- Header -->
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md z-10">
+<div class="flex items-center gap-8">
+<h2 class="text-xl font-bold">Dashboard</h2>
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-500" placeholder="Search data..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-sm">download</span>
+                        Export
+                    </button>
+<div class="size-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden ring-2 ring-primary/20">
+<img alt="User avatar" data-alt="Portrait of a smiling professional male user avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCOY7mGhOgioOloUTeiXLi-Jwdgwegbf3SMrpx68JwvNzL1c3WApwMP_oirWh4Jg2IAA6W8CfuJc-Mg0exEscS4ILtCG0_YrQuX7ISbmOj1fp4Hx2M5Hltc0e2ZeQbSr2ep2YOE3dhTAZefhfAMhcbhVjFr-cCX0VfeJN6khrr_C1x8-jyU2LH_LQg7Oil_CHl0CN_ItaSHo0sNtcM71KuKTx4WNyPPi454i4m1UekGMNN7qNTC_avLI0W_SaapOfLmWEEis5iXAkg"/>
+</div>
+</div>
+</header>
+<!-- Dashboard Content -->
+<div class="p-8 space-y-8">
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<div class="bg-white dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Vehicles Scanned Today</p>
+<div class="flex items-baseline gap-3 mt-2">
+<h3 class="text-3xl font-bold">14,284</h3>
+<span class="text-emerald-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                                12%
+                            </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Suspicious Vehicles</p>
+<div class="flex items-baseline gap-3 mt-2">
+<h3 class="text-3xl font-bold">28</h3>
+<span class="text-emerald-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                                2%
+                            </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Verified Vehicles</p>
+<div class="flex items-baseline gap-3 mt-2">
+<h3 class="text-3xl font-bold">14,256</h3>
+<span class="text-rose-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_down</span>
+                                1%
+                            </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Detection Accuracy</p>
+<div class="flex items-baseline gap-3 mt-2">
+<h3 class="text-3xl font-bold">98.4%</h3>
+<span class="text-emerald-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+                                0.5%
+                            </span>
+</div>
+</div>
+</div>
+<!-- Latest Traffic Frame Section -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h2 class="text-xl font-bold">Latest Traffic Frame</h2>
+<span class="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="size-2 rounded-full bg-primary animate-pulse"></span>
+                            Live Feed
+                        </span>
+</div>
+<div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-900 shadow-2xl group border border-slate-200 dark:border-slate-800">
+<img alt="Traffic intersection" class="w-full h-full object-cover opacity-80" data-alt="High angle view of a busy city highway at night with car lights trailing" src="https://lh3.googleusercontent.com/aida-public/AB6AXuACKfolH38Kym8uqlwJFs0sCQmhxDqsLRJR8XfKd37wzi1KwGslbCNAylDoNYAKwt46FE_J-jQ9-oPYqWkoPfHHXK2PAAxleUrzxQMjCz95pVtdbowV7xTtut4qp4G8sHa9cVFUxHF_Efc1o467Er1CUrg-GKzbhGUmzp6RHl7OUxOX8pY7ZGYXigl9ldyGMe6OEQ3me5NA4rfu3tRPh5HVMFcvfCmCr0K8C-3kB6LDoJAzGEEyWsH_j-0j3gcc-QQHD3kI5BqGrl8"/>
+<!-- AI Bounding Box Overlays -->
+<div class="absolute inset-0 pointer-events-none">
+<!-- Box 1 -->
+<div class="absolute top-[30%] left-[25%] w-[15%] h-[20%] border-2 border-primary rounded-sm shadow-[0_0_10px_rgba(37,99,235,0.5)]">
+<div class="absolute -top-6 left-0 bg-primary text-white text-[10px] px-2 py-0.5 rounded-t-sm font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]">directions_car</span>
+                                    SUV 98%
+                                </div>
+</div>
+<!-- Box 2 -->
+<div class="absolute top-[45%] left-[55%] w-[12%] h-[18%] border-2 border-emerald-500 rounded-sm shadow-[0_0_10px_rgba(16,185,129,0.5)]">
+<div class="absolute -top-6 left-0 bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded-t-sm font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]">directions_car</span>
+                                    SEDAN 94%
+                                </div>
+</div>
+<!-- Box 3 (Suspicious) -->
+<div class="absolute top-[60%] left-[40%] w-[10%] h-[15%] border-2 border-rose-500 rounded-sm shadow-[0_0_10px_rgba(244,63,94,0.5)]">
+<div class="absolute -top-6 left-0 bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-t-sm font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]">warning</span>
+                                    UNKNOWN 82%
+                                </div>
+</div>
+</div>
+<!-- Camera Info Overlay -->
+<div class="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-4 py-2 rounded-lg border border-white/10 text-white text-xs space-y-1">
+<p class="font-bold">CAM-042: Sector B-12</p>
+<p class="opacity-70">2023-11-24 14:28:42 UTC</p>
+</div>
+<!-- Playback Controls Overlay -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="material-symbols-outlined hover:text-primary transition-colors">skip_previous</button>
+<button class="material-symbols-outlined text-4xl hover:text-primary transition-colors">pause_circle</button>
+<button class="material-symbols-outlined hover:text-primary transition-colors">skip_next</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

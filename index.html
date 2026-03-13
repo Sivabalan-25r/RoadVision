@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoadVision — Dashboard</title>
+  <meta name="description" content="RoadVision AI Traffic Analytics Dashboard — real-time vehicle scanning, detection accuracy, and traffic monitoring." />
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Slot -->
+    <div id="sidebar-slot"></div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <!-- Header Slot -->
+      <div id="header-slot"></div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Stat Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <p class="stat-label">Vehicles Scanned Today</p>
+            <div class="stat-row">
+              <span class="stat-value">14,284</span>
+              <span class="stat-trend up">
+                <span class="material-symbols-outlined">trending_up</span>
+                12%
+              </span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <p class="stat-label">Suspicious Vehicles</p>
+            <div class="stat-row">
+              <span class="stat-value">28</span>
+              <span class="stat-trend up">
+                <span class="material-symbols-outlined">trending_up</span>
+                2%
+              </span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <p class="stat-label">Verified Vehicles</p>
+            <div class="stat-row">
+              <span class="stat-value">14,256</span>
+              <span class="stat-trend down">
+                <span class="material-symbols-outlined">trending_down</span>
+                1%
+              </span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <p class="stat-label">Detection Accuracy</p>
+            <div class="stat-row">
+              <span class="stat-value">98.4%</span>
+              <span class="stat-trend up">
+                <span class="material-symbols-outlined">trending_up</span>
+                0.5%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Latest Traffic Frame -->
+        <div class="section-header">
+          <h2>Latest Traffic Frame</h2>
+          <span class="badge-live primary">
+            <span class="pulse"></span>
+            Live Feed
+          </span>
+        </div>
+
+        <div class="frame-viewer">
+          <img src="assets/images/traffic-frame.jpg" alt="Traffic intersection — latest captured frame" />
+
+          <!-- AI Bounding Box Overlays -->
+          <div class="bbox primary" style="top:30%; left:25%; width:15%; height:20%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
+              SUV 98%
+            </div>
+          </div>
+          <div class="bbox valid" style="top:45%; left:55%; width:12%; height:18%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
+              SEDAN 94%
+            </div>
+          </div>
+          <div class="bbox suspicious" style="top:60%; left:40%; width:10%; height:15%;">
+            <div class="bbox-label">
+              <span class="material-symbols-outlined" style="font-size:10px">warning</span>
+              UNKNOWN 82%
+            </div>
+          </div>
+
+          <!-- Camera Info -->
+          <div class="cam-info">
+            <p class="cam-name">CAM-042: Sector B-12</p>
+            <p class="cam-time">2023-11-24 14:28:42 UTC</p>
+          </div>
+
+          <!-- Playback Controls -->
+          <div class="playback-controls">
+            <button class="material-symbols-outlined">skip_previous</button>
+            <button class="material-symbols-outlined" style="font-size:36px">pause_circle</button>
+            <button class="material-symbols-outlined">skip_next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="components/loader.js"></script>
+</body>
+</html>

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RoadVision - Live Monitoring</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2563EB",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#0B1220",
+                        "card-dark": "#161E2D",
+                        "border-dark": "#232D3F"
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+        }
+        .video-overlay-green {
+            border: 2px solid #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+        }
+        .video-overlay-red {
+            border: 2px solid #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="flex h-screen overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="w-64 flex-shrink-0 border-r border-slate-200 dark:border-border-dark bg-white dark:bg-background-dark flex flex-col">
+<div class="p-6 flex items-center gap-3">
+<div class="size-10 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">visibility</span>
+</div>
+<div>
+<h1 class="text-lg font-bold leading-none">RoadVision</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400">AI Traffic System</p>
+</div>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-card-dark rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary/10 text-primary rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1">videocam</span>
+<span class="text-sm font-medium">Live Monitoring</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-card-dark rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">warning</span>
+<span class="text-sm font-medium">Violations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-card-dark rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="text-sm font-medium">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-card-dark rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-border-dark">
+<button class="flex items-center gap-3 w-full px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors">
+<span class="material-symbols-outlined">logout</span>
+<span class="text-sm font-medium">Logout</span>
+</button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col overflow-y-auto">
+<!-- Header -->
+<header class="flex items-center justify-between px-8 py-4 border-b border-slate-200 dark:border-border-dark bg-white/50 dark:bg-background-dark/50 backdrop-blur-md sticky top-0 z-10">
+<div class="flex items-center gap-4">
+<h2 class="text-xl font-bold tracking-tight">Live Monitoring</h2>
+<span class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-500 text-xs font-bold uppercase tracking-wider">
+<span class="size-2 rounded-full bg-red-500 animate-pulse"></span>
+                        Live
+                    </span>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="pl-10 pr-4 py-2 bg-slate-100 dark:bg-card-dark border-none rounded-xl text-sm focus:ring-2 focus:ring-primary w-64" placeholder="Search cameras..." type="text"/>
+</div>
+<button class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-card-dark rounded-full transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-primary rounded-full border-2 border-white dark:border-background-dark"></span>
+</button>
+<div class="size-8 rounded-full bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">account_circle</span>
+</div>
+</div>
+</header>
+<!-- Dashboard Content -->
+<div class="p-8 max-w-7xl mx-auto w-full space-y-8">
+<!-- Video Feed Viewer -->
+<div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-200 dark:border-border-dark group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Busy urban highway at night with multiple lanes and heavy traffic" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBHYDzSQDvZjUglpkkLHMOxPMbFsZvYr2wZ3QHTbjmbSKZIwD0_sMxCzNYAku37wXJERE8SAw7IBMqTcpP8UOOcy2P_GYFOPwxyiQX3tjLxtD8PrQvCbfbVcn4TVeF-6EG9b11y4WzY7BuOHxiBvSk4g6e-Na3mJvGZHdCwVxzl3Lyx0ldDBjRLfhKoP7nZ99N3QL4N6S-tXNdfXLBqYnqG7vMwYnBUqXDu-GUQFaZzGJY2mcie4Z3C9u1jJAySY3Aj8R1-4m2jXhI')"></div>
+<!-- Bounding Boxes Overlays (Simulated) -->
+<div class="absolute top-1/4 left-1/4 w-32 h-20 video-overlay-green rounded flex flex-col justify-end p-1">
+<span class="text-[10px] font-bold text-white bg-green-500/80 px-1 rounded-sm w-fit uppercase">Valid</span>
+</div>
+<div class="absolute top-1/2 left-1/3 w-28 h-20 video-overlay-green rounded flex flex-col justify-end p-1">
+<span class="text-[10px] font-bold text-white bg-green-500/80 px-1 rounded-sm w-fit uppercase">Valid</span>
+</div>
+<div class="absolute top-1/3 right-1/4 w-36 h-24 video-overlay-red rounded flex flex-col justify-end p-1">
+<span class="text-[10px] font-bold text-white bg-red-500/80 px-1 rounded-sm w-fit uppercase">Suspicious</span>
+</div>
+<div class="absolute bottom-1/4 right-1/3 w-32 h-20 video-overlay-green rounded flex flex-col justify-end p-1">
+<span class="text-[10px] font-bold text-white bg-green-500/80 px-1 rounded-sm w-fit uppercase">Valid</span>
+</div>
+<!-- Video Controls Overlay -->
+<div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+<button class="size-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1">pause</span>
+</button>
+</div>
+<!-- Bottom Bar Overlay -->
+<div class="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+<div class="flex items-center justify-between text-white text-xs">
+<div class="flex items-center gap-4">
+<span class="font-medium">CAM_084 - Main Expressway North</span>
+<span class="text-white/60">1080p • 60fps</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-sm cursor-pointer">volume_up</span>
+<span class="material-symbols-outlined text-sm cursor-pointer">fullscreen</span>
+<span class="material-symbols-outlined text-sm cursor-pointer">settings</span>
+</div>
+</div>
+<div class="mt-2 h-1 w-full bg-white/20 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-full"></div>
+</div>
+</div>
+</div>
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Total Vehicles -->
+<div class="bg-white dark:bg-card-dark p-6 rounded-xl border border-slate-200 dark:border-border-dark shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Vehicles</span>
+<div class="p-2 bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined text-primary">directions_car</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<h3 class="text-3xl font-bold">1,284</h3>
+<span class="text-green-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">arrow_upward</span> 12%
+                            </span>
+</div>
+<p class="text-xs text-slate-400 mt-2">Measured in the last 60 minutes</p>
+</div>
+<!-- Valid Registrations -->
+<div class="bg-white dark:bg-card-dark p-6 rounded-xl border border-slate-200 dark:border-border-dark shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Valid Registrations</span>
+<div class="p-2 bg-green-500/10 rounded-lg">
+<span class="material-symbols-outlined text-green-500">check_circle</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<h3 class="text-3xl font-bold">1,262</h3>
+<span class="text-green-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">arrow_upward</span> 10%
+                            </span>
+</div>
+<p class="text-xs text-slate-400 mt-2">Database match successful</p>
+</div>
+<!-- Violations -->
+<div class="bg-white dark:bg-card-dark p-6 rounded-xl border border-slate-200 dark:border-border-dark shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Violations</span>
+<div class="p-2 bg-red-500/10 rounded-lg">
+<span class="material-symbols-outlined text-red-500">warning</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<h3 class="text-3xl font-bold">22</h3>
+<span class="text-red-500 text-sm font-bold flex items-center">
+<span class="material-symbols-outlined text-sm">arrow_downward</span> 5%
+                            </span>
+</div>
+<p class="text-xs text-slate-400 mt-2">Requires manual review</p>
+</div>
+</div>
+<!-- Recent Events Table -->
+<div class="bg-white dark:bg-card-dark rounded-xl border border-slate-200 dark:border-border-dark overflow-hidden shadow-sm">
+<div class="p-6 border-b border-slate-200 dark:border-border-dark flex items-center justify-between">
+<h4 class="font-bold">Recent Detection Log</h4>
+<button class="text-primary text-sm font-medium hover:underline">View All Log</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-slate-50 dark:bg-background-dark/30 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
+<th class="px-6 py-4 font-semibold">Plate ID</th>
+<th class="px-6 py-4 font-semibold">Vehicle Type</th>
+<th class="px-6 py-4 font-semibold">Time</th>
+<th class="px-6 py-4 font-semibold">Status</th>
+<th class="px-6 py-4 font-semibold text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-200 dark:divide-border-dark">
+<tr class="hover:bg-slate-50 dark:hover:bg-background-dark/20 transition-colors">
+<td class="px-6 py-4 font-mono text-sm">ABC-1234</td>
+<td class="px-6 py-4 text-sm">Sedan (White)</td>
+<td class="px-6 py-4 text-sm text-slate-500">14:23:45</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded-lg bg-green-500/10 text-green-500 text-[10px] font-bold uppercase">Valid</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">info</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-background-dark/20 transition-colors">
+<td class="px-6 py-4 font-mono text-sm">XYZ-9876</td>
+<td class="px-6 py-4 text-sm">SUV (Black)</td>
+<td class="px-6 py-4 text-sm text-slate-500">14:22:12</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase">Violation</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">info</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-background-dark/20 transition-colors">
+<td class="px-6 py-4 font-mono text-sm">LMN-5542</td>
+<td class="px-6 py-4 text-sm">Truck (Grey)</td>
+<td class="px-6 py-4 text-sm text-slate-500">14:21:05</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded-lg bg-green-500/10 text-green-500 text-[10px] font-bold uppercase">Valid</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">info</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

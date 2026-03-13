@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoadVision — Detections</title>
+  <meta name="description" content="RoadVision suspicious vehicle detections — view flagged vehicles with registration mismatches and violations." />
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Slot -->
+    <div id="sidebar-slot"></div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <!-- Header Slot -->
+      <div id="header-slot"></div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Page Intro -->
+        <div class="section-header" style="margin-bottom:24px;">
+          <h2>Suspicious Vehicle Detections</h2>
+          <span class="badge alert">
+            <span class="material-symbols-outlined" style="font-size:14px">warning</span>
+            28 Flagged
+          </span>
+        </div>
+
+        <!-- Detections Grid -->
+        <div class="detections-grid">
+
+          <!-- Detection Card 1 -->
+          <div class="detection-card">
+            <img class="detection-card-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPNmodaSawQqYeqljNEm6TDpqvpHkfReY2HvN0os4zmsS1ybK8qT_nwQtZr961YmYlbZUnh4-hoAX55wBqQC1t5l_Xrb7WtRWlXRRxNVEZpsVimdF4a-oEWdf3r9RBMIQrlOOcMgOHPRuB88xBM1YOSTNCaHdEFOJclvNHslj4niD6PTvrOMmJ_JgtKPBFz5oY2PAg99VuzHW8Iv3wNdljdeNBUMIRPtuGEdA6It0ZhqiXM7KIgYxUrEYv0i4R-N52urTtwifxRJE" alt="Detected vehicle — black sedan" />
+            <div class="detection-card-body">
+              <div class="detection-row">
+                <span class="detection-label">Detected Registration</span>
+                <span class="plate-number">DL 3C AY 1234</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Correct Registration</span>
+                <span class="detection-value">DL 3C AY 1238</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Violation Type</span>
+                <span class="badge alert">Plate Mismatch</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detection Card 2 -->
+          <div class="detection-card">
+            <img class="detection-card-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6SDr7cJc5MqyaKPM4pfmTReucpkRqQrnfGLMSuK0QQ77ZrsyoW3CTyOYq9CnPRLt3falPCtCHid07SQQFI-jf6K1zhUt5mC6WU2FQnAhBIIrTGoBFR4M9Gb_eHBUMFfLIylo2f734M8JchdgzHZknfohdmZ3DfqRlYkJ_q-czqwCq7vlp81Y0JOsnXAcK38q_GPjtWPnFaueeYOtjsKbFRb2mqbN11NT5UjvuYyqFNt0uaeC3HjkGjaHi12u9Yv0mpItEI_z_lAE" alt="Detected vehicle — white SUV" />
+            <div class="detection-card-body">
+              <div class="detection-row">
+                <span class="detection-label">Detected Registration</span>
+                <span class="plate-number">MH 12 RN 9876</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Correct Registration</span>
+                <span class="detection-value">MH 12 RN 9871</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Violation Type</span>
+                <span class="badge warning">Expired Registration</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detection Card 3 -->
+          <div class="detection-card">
+            <img class="detection-card-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvUXByJsS5odHe28fzoVd7oZz9EfQCjfi6MhcgqMVMjtEGLgtJ-m58i0VyLZA7da7ERLiDvBET2vt86NlsDygl0A-LdUwifTMUns-3IPjdO-PlGnP893csMXwt5JADZdPtlRXhQgHM9S3B0YC2XMTiGyC53C0L0fDgFddfve87FKXkSi2_vxp0w-rEG-DIr1lIW67Tq8mSp2saQw6tiMAmwen6T6ET8XPrJ_9UK5I-5PXIbMFnAw1tT3dfHI9AA6tWGY9l5-XER0Y" alt="Detected vehicle — motorcycle" />
+            <div class="detection-card-body">
+              <div class="detection-row">
+                <span class="detection-label">Detected Registration</span>
+                <span class="plate-number">KA 01 MG 5566</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Correct Registration</span>
+                <span class="detection-value">KA 01 MG 5566</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Violation Type</span>
+                <span class="badge warning">No Helmet</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detection Card 4 -->
+          <div class="detection-card">
+            <img class="detection-card-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKNVnLiCGMxNncgn1G8E1E8YBlsOCVWtXOl3aaUhMcEIC7AkLu50rwW0PmmesVJGc5B7k0KV4yLnyckOb9pkzDlM4Hg5vVlvVYo6aIsnByCX4kcc2Oa_nBUBDwUKNCGeYIFMYxwB23yyzU_3TZ8EkzyueLEfUcM9TqC7As3aemDggLinH8_H38Hr6gdNR9eage-h1-sgRUu_DL_t5KkkkshFay92ks30azzqRCO9FkP5R5_uzfHP2kFV2Q6kvChVBB6EHGnvjFG2U" alt="Detected vehicle — red car" />
+            <div class="detection-card-body">
+              <div class="detection-row">
+                <span class="detection-label">Detected Registration</span>
+                <span class="plate-number">UP 16 AT 4321</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Correct Registration</span>
+                <span class="detection-value">UP 16 AT 4329</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Violation Type</span>
+                <span class="badge alert">Red Light Violation</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detection Card 5 -->
+          <div class="detection-card">
+            <img class="detection-card-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUu-rMGVWWykDNgnm7lI49N9mUFF4I4iPOYfgIlsHihJarHixRICK7dunFMdDKnSj_f2KJY0ZuGrloMm9F4qX1To-Ub082WeM9a8LwGbMxXn99KQY4_XdB7ljLTgxVzQN88GM9nZ7zcfFgvSUGNg2Nb0TnKCgJ3rTTcDua42u0KxTYQ1Tsd-PirkY8AUdslzTY-7--QdoeV05TIAF1MCBLAxzzRj1cwvBeFwU1p5Cv5Vw-pF9mCSV7SfUvnHmVyDPLPaffyWe6g9A" alt="Detected vehicle — silver sedan" />
+            <div class="detection-card-body">
+              <div class="detection-row">
+                <span class="detection-label">Detected Registration</span>
+                <span class="plate-number">HR 26 DQ 0045</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Correct Registration</span>
+                <span class="detection-value">HR 26 DQ 0045</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Violation Type</span>
+                <span class="badge alert">Speeding</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detection Card 6 -->
+          <div class="detection-card">
+            <img class="detection-card-img" src="https://lh3.googleusercontent.com/aida-public/AB6AXuACKfolH38Kym8uqlwJFs0sCQmhxDqsLRJR8XfKd37wzi1KwGslbCNAylDoNYAKwt46FE_J-jQ9-oPYqWkoPfHHXK2PAAxleUrzxQMjCz95pVtdbowV7xTtut4qp4G8sHa9cVFUxHF_Efc1o467Er1CUrg-GKzbhGUmzp6RHl7OUxOX8pY7ZGYXigl9ldyGMe6OEQ3me5NA4rfu3tRPh5HVMFcvfCmCr0K8C-3kB6LDoJAzGEEyWsH_j-0j3gcc-QQHD3kI5BqGrl8" alt="Detected vehicle — from traffic camera" />
+            <div class="detection-card-body">
+              <div class="detection-row">
+                <span class="detection-label">Detected Registration</span>
+                <span class="plate-number">TN 09 BK 7712</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Correct Registration</span>
+                <span class="detection-value">TN 09 BK 7718</span>
+              </div>
+              <div class="detection-row">
+                <span class="detection-label">Violation Type</span>
+                <span class="badge alert">Plate Mismatch</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="components/loader.js"></script>
+</body>
+</html>
