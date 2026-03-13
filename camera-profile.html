@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoadVision — Camera Profile</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Slot -->
+    <div id="sidebar-slot"></div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <!-- Header Slot -->
+      <div id="header-slot"></div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <div class="section-header" style="margin-bottom:24px;">
+          <h2>Camera Profile</h2>
+          <button class="btn-primary" id="detectLocationBtn">
+            <span class="material-symbols-outlined" style="font-size:18px">my_location</span>
+            Detect My Location
+          </button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px;">
+          <!-- Camera Info Card -->
+          <div class="card">
+            <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:8px;">
+              <span class="material-symbols-outlined" style="color:var(--primary);">videocam</span>
+              Camera Information
+            </h3>
+            
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div>
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Camera Name</label>
+                <input type="text" id="cameraNameInput" value="Camera 1" style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;" />
+              </div>
+
+              <div>
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Camera ID</label>
+                <input type="text" id="cameraIdInput" value="CAM-001" style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;" />
+              </div>
+
+              <div>
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Status</label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge success">
+                    <span style="width:6px; height:6px; border-radius:50%; background:var(--success); display:inline-block;"></span>
+                    Online
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Resolution</label>
+                <select id="resolutionSelect" style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px;">
+                  <option value="720p">720p (1280×720)</option>
+                  <option value="1080p" selected>1080p (1920×1080)</option>
+                  <option value="4k">4K (3840×2160)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Location Info Card -->
+          <div class="card">
+            <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:8px;">
+              <span class="material-symbols-outlined" style="color:var(--primary);">location_on</span>
+              Location Details
+            </h3>
+            
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div>
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Address</label>
+                <div id="addressDisplay" style="padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text); font-size:14px; min-height:42px;">
+                  Click "Detect My Location" to get address
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div>
+                  <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Latitude</label>
+                  <input type="text" id="latitudeInput" readonly style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;" placeholder="0.000000" />
+                </div>
+                <div>
+                  <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Longitude</label>
+                  <input type="text" id="longitudeInput" readonly style="width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;" placeholder="0.000000" />
+                </div>
+              </div>
+
+              <div>
+                <label style="display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px;">Accuracy</label>
+                <div id="accuracyDisplay" style="padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-secondary); color:var(--text-muted); font-size:14px;">
+                  Not detected yet
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Map Card -->
+        <div class="card">
+          <h3 style="margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+            <span class="material-symbols-outlined" style="color:var(--primary);">map</span>
+            Camera Location Map
+          </h3>
+          <div id="map" style="width:100%; height:500px; border-radius:var(--radius-md); overflow:hidden;"></div>
+        </div>
+
+        <!-- Save Button -->
+        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:24px;">
+          <a href="index.html" class="btn-outline">Cancel</a>
+          <button class="btn-primary" id="saveBtn">
+            <span class="material-symbols-outlined" style="font-size:18px">save</span>
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="components/loader.js"></script>
+  <script src="components/glare-hover.js"></script>
+  <script>
+    // Initialize map
+    let map = L.map('map').setView([20.5937, 78.9629], 5); // Default: India center
+    let marker = null;
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Load saved camera data
+    function loadCameraData() {
+      const cameraData = localStorage.getItem('roadvision_camera');
+      if (cameraData) {
+        try {
+          const camera = JSON.parse(cameraData);
+          document.getElementById('cameraNameInput').value = camera.name || 'Camera 1';
+          document.getElementById('cameraIdInput').value = camera.id || 'CAM-001';
+          document.getElementById('resolutionSelect').value = camera.resolution || '1080p';
+          
+          if (camera.latitude && camera.longitude) {
+            document.getElementById('latitudeInput').value = camera.latitude;
+            document.getElementById('longitudeInput').value = camera.longitude;
+            document.getElementById('addressDisplay').textContent = camera.address || 'Address not available';
+            document.getElementById('accuracyDisplay').textContent = camera.accuracy || 'Unknown';
+            
+            // Update map
+            const lat = parseFloat(camera.latitude);
+            const lng = parseFloat(camera.longitude);
+            map.setView([lat, lng], 16);
+            
+            if (marker) {
+              marker.setLatLng([lat, lng]);
+            } else {
+              marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup(`<b>${camera.name}</b><br>${camera.address || 'Camera Location'}`)
+                .openPopup();
+            }
+          }
+        } catch (e) {
+          console.error('Error loading camera data:', e);
+        }
+      }
+    }
+
+    // Detect location
+    document.getElementById('detectLocationBtn').addEventListener('click', () => {
+      const btn = document.getElementById('detectLocationBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">hourglass_top</span> Detecting...';
+
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser');
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">my_location</span> Detect My Location';
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const accuracy = Math.round(position.coords.accuracy);
+
+          // Update inputs
+          document.getElementById('latitudeInput').value = lat.toFixed(6);
+          document.getElementById('longitudeInput').value = lng.toFixed(6);
+          document.getElementById('accuracyDisplay').textContent = `±${accuracy} meters`;
+
+          // Update map
+          map.setView([lat, lng], 16);
+          
+          if (marker) {
+            marker.setLatLng([lat, lng]);
+          } else {
+            marker = L.marker([lat, lng]).addTo(map)
+              .bindPopup('<b>Camera Location</b><br>Your current location')
+              .openPopup();
+          }
+
+          // Reverse geocode to get address
+          try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+            const data = await response.json();
+            const address = data.display_name || 'Address not available';
+            document.getElementById('addressDisplay').textContent = address;
+          } catch (e) {
+            console.error('Error getting address:', e);
+            document.getElementById('addressDisplay').textContent = 'Address lookup failed';
+          }
+
+          btn.disabled = false;
+          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">my_location</span> Detect My Location';
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          alert('Unable to detect location. Please enable location services.');
+          btn.disabled = false;
+          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">my_location</span> Detect My Location';
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    });
+
+    // Save camera data
+    document.getElementById('saveBtn').addEventListener('click', () => {
+      const cameraData = {
+        name: document.getElementById('cameraNameInput').value,
+        id: document.getElementById('cameraIdInput').value,
+        resolution: document.getElementById('resolutionSelect').value,
+        latitude: document.getElementById('latitudeInput').value,
+        longitude: document.getElementById('longitudeInput').value,
+        address: document.getElementById('addressDisplay').textContent,
+        accuracy: document.getElementById('accuracyDisplay').textContent,
+        location: document.getElementById('addressDisplay').textContent.split(',')[0] || 'Unknown Location'
+      };
+
+      localStorage.setItem('roadvision_camera', JSON.stringify(cameraData));
+      
+      // Show success message
+      const btn = document.getElementById('saveBtn');
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">check</span> Saved!';
+      btn.style.background = 'var(--success)';
+      
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.style.background = '';
+      }, 2000);
+    });
+
+    // Load data on page load
+    window.addEventListener('load', loadCameraData);
+  </script>
+</body>
+</html>

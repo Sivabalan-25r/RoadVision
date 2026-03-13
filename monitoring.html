@@ -35,7 +35,7 @@
           <video id="webcamVideo" autoplay playsinline style="width:100%; height:100%; object-fit:cover; display:none;"></video>
           
           <!-- Static image fallback -->
-          <img id="staticImage" src="assets/images/traffic-frame.jpg" alt="Live traffic camera feed — Main Expressway" style="width:100%; height:100%; object-fit:cover;" />
+          <img id="staticImage" src="assets/images/camera-offline.svg" alt="Camera Offline" style="width:100%; height:100%; object-fit:cover;" />
 
           <!-- Canvas Overlay for Dynamic Bounding Boxes -->
           <canvas id="bboxCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
@@ -76,42 +76,39 @@
         <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-              <span class="stat-label" style="margin-bottom:0">Plates Scanned</span>
-              <span class="material-symbols-outlined" style="color:var(--primary); background:var(--primary-glow); padding:8px; border-radius:var(--radius-md);">directions_car</span>
+              <span class="stat-label" style="margin-bottom:0">Number Plates Detected</span>
+              <span class="material-symbols-outlined" style="color:var(--primary); background:var(--primary-glow); padding:8px; border-radius:var(--radius-md);">badge</span>
             </div>
             <div class="stat-row">
-              <span class="stat-value">1,284</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">arrow_upward</span>
-                12%
+              <span class="stat-value" id="totalPlatesScanned">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Total detected
               </span>
             </div>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Measured in the last 60 minutes</p>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Real-time plate detection active</p>
           </div>
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-              <span class="stat-label" style="margin-bottom:0">Valid Plates</span>
+              <span class="stat-label" style="margin-bottom:0">Legal Plates</span>
               <span class="material-symbols-outlined" style="color:var(--success); background:var(--success-glow); padding:8px; border-radius:var(--radius-md);">check_circle</span>
             </div>
             <div class="stat-row">
-              <span class="stat-value">1,262</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">arrow_upward</span>
-                10%
+              <span class="stat-value" id="legalPlatesCount">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Valid format
               </span>
             </div>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Database match successful</p>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Compliant with regulations</p>
           </div>
           <div class="stat-card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-              <span class="stat-label" style="margin-bottom:0">Plate Violations</span>
+              <span class="stat-label" style="margin-bottom:0">Illegal Plates</span>
               <span class="material-symbols-outlined" style="color:var(--alert); background:var(--alert-glow); padding:8px; border-radius:var(--radius-md);">warning</span>
             </div>
             <div class="stat-row">
-              <span class="stat-value">22</span>
-              <span class="stat-trend down">
-                <span class="material-symbols-outlined">arrow_downward</span>
-                5%
+              <span class="stat-value" id="illegalPlatesCount">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Violations found
               </span>
             </div>
             <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Requires manual review</p>
@@ -124,45 +121,22 @@
             <h3>Recent Detection Log</h3>
             <a href="history.html" style="color:var(--primary); font-size:13px; font-weight:600;">View All Log</a>
           </div>
-          <div style="overflow-x:auto;">
+          <div id="recentLogEmpty" style="text-align:center; padding:40px 20px;">
+            <span class="material-symbols-outlined" style="font-size:48px; color:var(--text-muted); display:block; margin-bottom:12px;">history</span>
+            <p style="color:var(--text-muted); font-size:14px;">No detections yet. Start webcam and click play to begin detecting plates.</p>
+          </div>
+          <div style="overflow-x:auto; display:none;" id="recentLogTable">
             <table class="data-table">
               <thead>
                 <tr>
                   <th>Plate ID</th>
-                  <th>Vehicle Type</th>
-                  <th>Time</th>
                   <th>Status</th>
-                  <th style="text-align:right">Action</th>
+                  <th>Confidence</th>
+                  <th>Time</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td><span class="plate-number">ABC-1234</span></td>
-                  <td>Sedan (White)</td>
-                  <td style="color:var(--text-muted)">14:23:45</td>
-                  <td><span class="badge success">Valid</span></td>
-                  <td style="text-align:right">
-                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
-                  </td>
-                </tr>
-                <tr>
-                  <td><span class="plate-number">XYZ-9876</span></td>
-                  <td>SUV (Black)</td>
-                  <td style="color:var(--text-muted)">14:22:12</td>
-                  <td><span class="badge alert">Character Manipulation</span></td>
-                  <td style="text-align:right">
-                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
-                  </td>
-                </tr>
-                <tr>
-                  <td><span class="plate-number">LMN-5542</span></td>
-                  <td>Truck (Grey)</td>
-                  <td style="color:var(--text-muted)">14:21:05</td>
-                  <td><span class="badge success">Valid</span></td>
-                  <td style="text-align:right">
-                    <button class="icon-btn"><span class="material-symbols-outlined" style="font-size:20px">info</span></button>
-                  </td>
-                </tr>
+              <tbody id="recentLogBody">
+                <!-- Rows will be dynamically inserted -->
               </tbody>
             </table>
           </div>
@@ -187,6 +161,9 @@
     const legalCountEl = document.getElementById('legalCount');
     const illegalCountEl = document.getElementById('illegalCount');
     const totalCountEl = document.getElementById('totalCount');
+    const recentLogBody = document.getElementById('recentLogBody');
+    const recentLogTable = document.getElementById('recentLogTable');
+    const recentLogEmpty = document.getElementById('recentLogEmpty');
 
     let webcamStream = null;
     let isWebcamActive = false;
@@ -195,6 +172,7 @@
     let seenPlates = new Set();
     let legalCount = 0;
     let illegalCount = 0;
+    let recentDetections = [];
 
     // Colors matching the design system
     const COLORS = {
@@ -216,7 +194,7 @@
     window.addEventListener('resize', resizeCanvas);
     window.addEventListener('load', () => {
       resizeCanvas();
-      fetchMockDetections();
+      // Don't show mock detections on load - wait for user to start detection
     });
 
     // ---- Webcam Control ----
@@ -244,13 +222,21 @@
         isWebcamActive = false;
         toggleWebcamBtn.textContent = 'videocam';
         camName.textContent = 'CAM-084: Main Expressway North';
+        
+        // Stop detection and clear canvas when webcam is turned off
         stopDetection();
+        currentDetections = [];
+        drawDetections(currentDetections);
+        toggleDetectionBtn.textContent = 'play_circle';
       }
     });
 
     // ---- Detection Control ----
     toggleDetectionBtn.addEventListener('click', () => {
       if (!isDetectionActive) {
+        // Clear any existing overlays before starting
+        currentDetections = [];
+        drawDetections(currentDetections);
         startDetection();
         toggleDetectionBtn.textContent = 'pause_circle';
       } else {
@@ -265,14 +251,21 @@
       seenPlates.clear();
       legalCount = 0;
       illegalCount = 0;
+      recentDetections = [];
       updateStats();
+      updateRecentLog();
+      
+      // Clear any existing detections
+      currentDetections = [];
+      drawDetections(currentDetections);
       
       if (isWebcamActive) {
         // Process webcam frames
         detectionInterval = setInterval(processWebcamFrame, 1000); // Every 1 second
       } else {
-        // Use mock detections for static image
-        detectionInterval = setInterval(fetchMockDetections, 3000);
+        // Show message that webcam is needed for real detection
+        alert('Please enable webcam to start real-time detection. Click the camera icon first.');
+        stopDetection();
       }
     }
 
@@ -291,13 +284,51 @@
       legalCountEl.textContent = legalCount;
       illegalCountEl.textContent = illegalCount;
       totalCountEl.textContent = legalCount + illegalCount;
+      
+      // Update main stats cards
+      document.getElementById('totalPlatesScanned').textContent = legalCount + illegalCount;
+      document.getElementById('legalPlatesCount').textContent = legalCount;
+      document.getElementById('illegalPlatesCount').textContent = illegalCount;
+    }
+
+    function updateRecentLog() {
+      if (recentDetections.length === 0) {
+        recentLogEmpty.style.display = 'block';
+        recentLogTable.style.display = 'none';
+        return;
+      }
+
+      recentLogEmpty.style.display = 'none';
+      recentLogTable.style.display = 'block';
+
+      // Show last 10 detections
+      const recent = recentDetections.slice(-10).reverse();
+      recentLogBody.innerHTML = recent.map(det => {
+        const badgeClass = det.violation ? 'alert' : 'success';
+        const statusText = det.violation || 'Legal';
+        const confidence = Math.round(det.confidence * 100);
+        
+        return `
+          <tr>
+            <td><span class="plate-number">${det.detected_plate}</span></td>
+            <td><span class="badge ${badgeClass}">${statusText}</span></td>
+            <td style="color:var(--success); font-weight:600;">${confidence}%</td>
+            <td style="color:var(--text-muted)">${det.time}</td>
+          </tr>
+        `;
+      }).join('');
     }
 
     // ---- Process Webcam Frame ----
     async function processWebcamFrame() {
-      if (!isWebcamActive || !webcamVideo.videoWidth) return;
+      if (!isWebcamActive || !webcamVideo.videoWidth) {
+        console.log('Webcam not ready:', { isWebcamActive, videoWidth: webcamVideo.videoWidth });
+        return;
+      }
 
       try {
+        console.log('Capturing frame from webcam...');
+        
         // Capture frame from video
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = webcamVideo.videoWidth;
@@ -307,19 +338,28 @@
 
         // Convert to blob
         const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.8));
+        console.log('Frame captured, size:', blob.size, 'bytes');
 
         // Send to backend
         const formData = new FormData();
         formData.append('file', blob, 'frame.jpg');
 
+        console.log('Sending frame to backend...');
         const res = await fetch('http://localhost:8000/api/process-frame', {
           method: 'POST',
           body: formData
         });
 
-        if (!res.ok) throw new Error('Backend error');
+        console.log('Backend response status:', res.status);
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('Backend error:', errorText);
+          throw new Error('Backend error: ' + res.status);
+        }
 
         const data = await res.json();
+        console.log('Detections received:', data.detections?.length || 0);
         currentDetections = data.detections || [];
         
         // Update counts for new plates
@@ -327,12 +367,25 @@
           if (det.detected_plate && det.detected_plate !== 'Detecting...') {
             if (!seenPlates.has(det.detected_plate)) {
               seenPlates.add(det.detected_plate);
+              
+              // Add to recent detections log
+              const now = new Date();
+              const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+              recentDetections.push({
+                detected_plate: det.detected_plate,
+                violation: det.violation,
+                confidence: det.confidence,
+                time: timeStr
+              });
+              
               if (det.violation) {
                 illegalCount++;
               } else {
                 legalCount++;
               }
               updateStats();
+              updateRecentLog();
+              console.log('New plate detected:', det.detected_plate, det.violation ? 'ILLEGAL' : 'LEGAL');
             }
           }
         });
@@ -409,47 +462,6 @@
           ctx.fillText(icon, labelX + labelW - 24, labelY + 12);
         }
       });
-    }
-
-    // ---- Fetch mock detections (for static image) ----
-    async function fetchMockDetections() {
-      try {
-        const res = await fetch('http://localhost:8000/api/live-detections');
-        if (!res.ok) throw new Error('Backend unavailable');
-        const data = await res.json();
-        currentDetections = data.detections || [];
-      } catch (err) {
-        // Fallback: use hardcoded mock detections
-        currentDetections = getMockDetections();
-      }
-      drawDetections(currentDetections);
-    }
-
-    // ---- Mock data (used when backend is offline) ----
-    function getMockDetections() {
-      return [
-        {
-          detected_plate: 'WB65D18753',
-          correct_plate: 'WB 65 D 18753',
-          violation: null,
-          confidence: 0.97,
-          bbox: [35, 45, 18, 8]
-        },
-        {
-          detected_plate: 'MH12AB1234',
-          correct_plate: 'MH 12 AB 1234',
-          violation: null,
-          confidence: 0.95,
-          bbox: [60, 30, 16, 7]
-        },
-        {
-          detected_plate: 'TN1OAB5678',
-          correct_plate: 'TN10AB5678',
-          violation: 'Character Manipulation',
-          confidence: 0.91,
-          bbox: [25, 55, 17, 8]
-        }
-      ];
     }
   </script>
 </body>

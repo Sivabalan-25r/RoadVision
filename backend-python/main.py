@@ -297,25 +297,32 @@ async def process_camera_frame(file: UploadFile = File(...)):
     Returns:
         JSON with detected plates and their bounding boxes (as percentages).
     """
+    logger.info("Received frame for processing")
+    
     try:
         # Read the uploaded frame
         contents = await file.read()
+        logger.info(f"Frame size: {len(contents)} bytes")
+        
         nparr = np.frombuffer(contents, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
+            logger.error("Failed to decode frame")
             raise HTTPException(status_code=400, detail="Invalid image")
         
         # Get frame dimensions
         frame_height, frame_width = frame.shape[:2]
+        logger.info(f"Frame dimensions: {frame_width}x{frame_height}")
         
         # Run YOLO detection
         from recognition.plate_reader import detect_plates
         detections = detect_plates(frame, frame_number=0)
+        logger.info(f"YOLO detected {len(detections)} plates")
         
         # Convert detections to percentage-based bounding boxes
         results = []
-        for det in detections:
+        for idx, det in enumerate(detections):
             bbox = det['bbox']  # [x, y, w, h] in pixels
             
             # Convert to percentages
@@ -333,6 +340,8 @@ async def process_camera_frame(file: UploadFile = File(...)):
                 from rules.plate_rules import validate_plate
                 validation = validate_plate(plate_text)
                 
+                logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
+                
                 results.append({
                     "detected_plate": validation.detected_plate,
                     "correct_plate": validation.correct_plate,
@@ -347,6 +356,7 @@ async def process_camera_frame(file: UploadFile = File(...)):
                 })
             else:
                 # No OCR text, just show the detection
+                logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")
                 results.append({
                     "detected_plate": "Detecting...",
                     "correct_plate": "",
@@ -360,6 +370,7 @@ async def process_camera_frame(file: UploadFile = File(...)):
                     ]
                 })
         
+        logger.info(f"Returning {len(results)} results to frontend")
         return JSONResponse(content={"detections": results})
         
     except Exception as e:

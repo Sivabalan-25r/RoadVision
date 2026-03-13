@@ -297,8 +297,18 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
     # Use preprocessed image for OCR if available
     ocr_input = preprocessed_image if preprocessed_image is not None else plate_image
     
-    # Try EasyOCR first (best for license plates)
-    return _easyocr_recognize(ocr_input)
+    # Try EasyOCR first (most reliable, best for license plates)
+    text, conf = _easyocr_recognize(ocr_input)
+    if text and conf >= 0.3:
+        return text, conf
+    
+    # Try PaddleOCR second (good for Asian text but has compatibility issues)
+    text, conf = _paddleocr_recognize(plate_image)
+    if text and conf >= 0.3:
+        return text, conf
+    
+    # Fallback to Tesseract
+    return _tesseract_recognize(ocr_input)
 
 
 # ---- PaddleOCR Fallback (replaces EasyOCR for better Indian plate accuracy) ----
@@ -437,44 +447,38 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return _tesseract_recognize(plate_image)
 
     try:
-        # Call OCR without cls parameter for compatibility
+        # PaddleOCR 3.4+ uses PaddleX format - call without cls parameter
         results = reader.ocr(plate_image)
 
         if not results or not results[0]:
-            logger.debug("PaddleOCR returned empty results, trying Tesseract")
-            return _tesseract_recognize(plate_image)
+            logger.debug("PaddleOCR returned empty results, trying EasyOCR")
+            return _easyocr_recognize(plate_image)
 
-        # The installed version might return Paddlex dict format or standard list format
         texts = []
         confidences = []
         
-        # Handle PaddleX dict format
-        if isinstance(results[0], dict) and 'rec_texts' in results[0]:
+        # Handle both PaddleX dict format and standard list format
+        if isinstance(results[0], dict):
+            # PaddleX 3.4+ format: {'rec_texts': [...], 'rec_scores': [...]}
             rec_texts = results[0].get('rec_texts', [])
             rec_scores = results[0].get('rec_scores', [])
             for text, conf in zip(rec_texts, rec_scores):
                 if conf >= 0.5:
-                    texts.append(text)
-                    confidences.append(conf)
-        # Handle standard PaddleOCR format: [[[box], (text, conf)], ...]
+                    texts.append(str(text))
+                    confidences.append(float(conf))
         elif isinstance(results[0], list):
+            # Standard PaddleOCR format: [[[box], (text, conf)], ...]
             for line in results[0]:
                 if line and len(line) >= 2:
-                    # line format: [box_coords, (text, confidence)]
-                    if isinstance(line[1], tuple) and len(line[1]) >= 2:
-                        text, conf = line[1][0], line[1][1]
-                        if conf >= 0.5:
-                            texts.append(str(text))
-                            confidences.append(float(conf))
-                    elif isinstance(line[1], list) and len(line[1]) >= 2:
+                    if isinstance(line[1], (tuple, list)) and len(line[1]) >= 2:
                         text, conf = line[1][0], line[1][1]
                         if conf >= 0.5:
                             texts.append(str(text))
                             confidences.append(float(conf))
 
         if not texts:
-            logger.debug("PaddleOCR: No text with sufficient confidence, trying Tesseract")
-            return _tesseract_recognize(plate_image)
+            logger.debug("PaddleOCR: No text with sufficient confidence, trying EasyOCR")
+            return _easyocr_recognize(plate_image)
 
         combined_text = ''.join(texts).strip().upper()
         avg_conf = sum(confidences) / len(confidences)
@@ -482,8 +486,8 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return combined_text, avg_conf
 
     except Exception as e:
-        logger.warning(f"PaddleOCR failed: {e}, falling back to Tesseract")
-        return _tesseract_recognize(plate_image)
+        logger.warning(f"PaddleOCR failed: {e}, falling back to EasyOCR")
+        return _easyocr_recognize(plate_image)
 
 
 def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:

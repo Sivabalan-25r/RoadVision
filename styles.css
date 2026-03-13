@@ -778,6 +778,7 @@ input { font-family: inherit; }
   cursor: pointer;
   transition: all .25s ease;
   margin-bottom: 24px;
+  width: 100%;
 }
 
 .upload-zone:hover,
@@ -789,6 +790,11 @@ input { font-family: inherit; }
 .upload-zone-inner {
   text-align: center;
   padding: 32px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .upload-icon {

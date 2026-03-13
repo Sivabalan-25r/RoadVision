@@ -65,7 +65,7 @@
         </div>
 
         <!-- Upload Traffic Video -->
-        <div class="section-header">
+        <div class="section-header" style="justify-content: center; gap: 12px;">
           <h2>Upload Traffic Video</h2>
           <span class="badge primary" style="gap:4px;">
             <span class="material-symbols-outlined" style="font-size:14px">videocam</span>
@@ -324,8 +324,14 @@
 
         if (!data.detections || data.detections.length === 0) {
           showNoDetections();
+          // Clear old detections from localStorage
+          localStorage.removeItem('roadvision_detections');
           return;
         }
+
+        // Save detections to localStorage for detections page
+        localStorage.setItem('roadvision_detections', JSON.stringify(data.detections));
+        console.log(`Saved ${data.detections.length} detections to localStorage`);
 
         displayResults(data.detections);
 

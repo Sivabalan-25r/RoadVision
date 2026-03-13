@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <!-- Dark background -->
+  <rect width="800" height="450" fill="#0f172a"/>
+  
+  <!-- Grid pattern -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="450" fill="url(#grid)"/>
+  
+  <!-- Camera icon -->
+  <g transform="translate(400, 180)">
+    <!-- Camera body -->
+    <rect x="-60" y="-30" width="120" height="80" rx="8" fill="#334155" stroke="#475569" stroke-width="2"/>
+    <!-- Lens -->
+    <circle cx="0" cy="10" r="25" fill="#1e293b" stroke="#475569" stroke-width="2"/>
+    <circle cx="0" cy="10" r="15" fill="#0f172a"/>
+    <!-- Viewfinder -->
+    <rect x="-50" y="-25" width="30" height="15" rx="3" fill="#1e293b"/>
+    <!-- Recording light (off) -->
+    <circle cx="35" cy="-15" r="5" fill="#475569"/>
+    
+    <!-- Slash through camera (offline indicator) -->
+    <line x1="-70" y1="-50" x2="70" y2="70" stroke="#ef4444" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="400" y="290" font-family="Inter, system-ui, sans-serif" font-size="24" font-weight="600" fill="#cbd5e1" text-anchor="middle">
+    Camera Offline
+  </text>
+  <text x="400" y="320" font-family="Inter, system-ui, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">
+    Click the camera icon to enable webcam
+  </text>
+</svg>
