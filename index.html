@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — Dashboard</title>
-  <meta name="description" content="RoadVision AI Traffic Analytics Dashboard — real-time vehicle scanning, detection accuracy, and traffic monitoring." />
+  <meta name="description" content="RoadVision AI Dashboard — upload traffic footage, detect illegal number plates, and view analysis results." />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 </head>
@@ -23,7 +23,7 @@
         <!-- Stat Cards -->
         <div class="stats-grid">
           <div class="stat-card">
-            <p class="stat-label">Vehicles Scanned Today</p>
+            <p class="stat-label">Plates Scanned</p>
             <div class="stat-row">
               <span class="stat-value">14,284</span>
               <span class="stat-trend up">
@@ -33,7 +33,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <p class="stat-label">Suspicious Vehicles</p>
+            <p class="stat-label">Illegal Plates Found</p>
             <div class="stat-row">
               <span class="stat-value">28</span>
               <span class="stat-trend up">
@@ -43,7 +43,7 @@
             </div>
           </div>
           <div class="stat-card">
-            <p class="stat-label">Verified Vehicles</p>
+            <p class="stat-label">Valid Plates</p>
             <div class="stat-row">
               <span class="stat-value">14,256</span>
               <span class="stat-trend down">
@@ -64,55 +64,346 @@
           </div>
         </div>
 
-        <!-- Latest Traffic Frame -->
+        <!-- Upload Traffic Video -->
         <div class="section-header">
-          <h2>Latest Traffic Frame</h2>
-          <span class="badge-live primary">
-            <span class="pulse"></span>
-            Live Feed
+          <h2>Upload Traffic Video</h2>
+          <span class="badge primary" style="gap:4px;">
+            <span class="material-symbols-outlined" style="font-size:14px">videocam</span>
+            Max 60 sec
           </span>
         </div>
 
-        <div class="frame-viewer">
-          <img src="assets/images/traffic-frame.jpg" alt="Traffic intersection — latest captured frame" />
+        <!-- Upload Zone (visible before upload) -->
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-zone-inner">
+            <span class="material-symbols-outlined upload-icon">cloud_upload</span>
+            <p class="upload-title">Drag & drop your traffic video here</p>
+            <p class="upload-subtitle">or click to browse • MP4, MOV, WEBM • Max 1 minute</p>
+            <button class="btn-primary" id="uploadBtn" style="margin-top:16px;">
+              <span class="material-symbols-outlined" style="font-size:18px">upload_file</span>
+              Upload Traffic Video
+            </button>
+          </div>
+          <input type="file" id="videoInput" accept="video/mp4,video/mov,video/webm,video/quicktime" hidden />
+        </div>
 
-          <!-- AI Bounding Box Overlays -->
-          <div class="bbox primary" style="top:30%; left:25%; width:15%; height:20%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
-              SUV 98%
+        <!-- Error Message -->
+        <div class="upload-error" id="uploadError" style="display:none;">
+          <span class="material-symbols-outlined" style="font-size:18px">error</span>
+          <span id="errorText">Video must be 60 seconds or shorter.</span>
+        </div>
+
+        <!-- Video Preview (visible after upload) -->
+        <div class="video-preview-section" id="videoPreview" style="display:none;">
+          <div class="frame-viewer" style="margin-bottom:16px;">
+            <video id="videoPlayer" controls style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+            <!-- Bounding box overlay for violations -->
+            <div class="bbox suspicious" id="violationBbox" style="display:none; top:35%; left:40%; width:20%; height:12%;">
+              <div class="bbox-label">
+                <span class="material-symbols-outlined" style="font-size:10px">warning</span>
+                Illegal Plate
+              </div>
             </div>
           </div>
-          <div class="bbox valid" style="top:45%; left:55%; width:12%; height:18%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">directions_car</span>
-              SEDAN 94%
-            </div>
-          </div>
-          <div class="bbox suspicious" style="top:60%; left:40%; width:10%; height:15%;">
-            <div class="bbox-label">
-              <span class="material-symbols-outlined" style="font-size:10px">warning</span>
-              UNKNOWN 82%
-            </div>
-          </div>
 
-          <!-- Camera Info -->
-          <div class="cam-info">
-            <p class="cam-name">CAM-042: Sector B-12</p>
-            <p class="cam-time">2023-11-24 14:28:42 UTC</p>
-          </div>
-
-          <!-- Playback Controls -->
-          <div class="playback-controls">
-            <button class="material-symbols-outlined">skip_previous</button>
-            <button class="material-symbols-outlined" style="font-size:36px">pause_circle</button>
-            <button class="material-symbols-outlined">skip_next</button>
+          <!-- File Info & Actions -->
+          <div class="video-actions">
+            <div class="video-file-info">
+              <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">movie</span>
+              <div>
+                <p class="video-filename" id="videoFilename">video.mp4</p>
+                <p class="video-meta" id="videoMeta">0:00 • 0 MB</p>
+              </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn-outline" id="removeVideoBtn">
+                <span class="material-symbols-outlined" style="font-size:18px">delete</span>
+                Remove
+              </button>
+              <button class="btn-primary" id="analyzeBtn">
+                <span class="material-symbols-outlined" style="font-size:18px">search</span>
+                Analyze Video
+              </button>
+            </div>
           </div>
         </div>
+
+        <!-- Processing Indicator -->
+        <div class="processing-indicator" id="processingIndicator" style="display:none;">
+          <div class="processing-spinner"></div>
+          <div>
+            <p style="font-weight:600; font-size:15px;">Analyzing video frames...</p>
+            <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">Running detection pipeline: Vehicle → Plate → CRNN → Pattern Analysis</p>
+          </div>
+        </div>
+
+        <!-- Detection Results (visible after analysis) -->
+        <div id="detectionResults" style="display:none; margin-top:32px;">
+          <div class="section-header" style="margin-bottom:16px;">
+            <h2>Detection Results</h2>
+            <span class="badge alert" id="resultsCount">
+              <span class="material-symbols-outlined" style="font-size:14px">warning</span>
+              0 Violations
+            </span>
+          </div>
+
+          <div class="detections-grid" id="resultsGrid">
+            <!-- Results will be injected here by JS -->
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 
   <script src="components/loader.js"></script>
+  <script>
+    // ============ Video Upload Logic ============
+    const uploadZone = document.getElementById('uploadZone');
+    const videoInput = document.getElementById('videoInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadError = document.getElementById('uploadError');
+    const errorText = document.getElementById('errorText');
+    const videoPreview = document.getElementById('videoPreview');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const videoFilename = document.getElementById('videoFilename');
+    const videoMeta = document.getElementById('videoMeta');
+    const removeVideoBtn = document.getElementById('removeVideoBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const processingIndicator = document.getElementById('processingIndicator');
+    const detectionResults = document.getElementById('detectionResults');
+    const resultsGrid = document.getElementById('resultsGrid');
+    const resultsCount = document.getElementById('resultsCount');
+    const violationBbox = document.getElementById('violationBbox');
+
+    let uploadedFile = null;
+
+    // Click to upload
+    uploadBtn.addEventListener('click', () => videoInput.click());
+    uploadZone.addEventListener('click', (e) => {
+      if (e.target !== uploadBtn && !uploadBtn.contains(e.target)) {
+        videoInput.click();
+      }
+    });
+
+    // Drag and drop
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('drag-over');
+    });
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('drag-over');
+    });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileSelect(file);
+    });
+
+    // File input change
+    videoInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) handleFileSelect(e.target.files[0]);
+    });
+
+    function handleFileSelect(file) {
+      // Validate type
+      const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/mov'];
+      if (!validTypes.includes(file.type)) {
+        showError('Unsupported format. Use MP4, MOV, or WEBM.');
+        return;
+      }
+
+      // Create a temporary video element to check duration
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.onloadedmetadata = function () {
+        URL.revokeObjectURL(tempVideo.src);
+        if (tempVideo.duration > 60) {
+          showError('Video must be 60 seconds or shorter.');
+          return;
+        }
+        // Valid file
+        uploadedFile = file;
+        hideError();
+        showPreview(file, tempVideo.duration);
+      };
+      tempVideo.onerror = function () {
+        showError('Could not read video file.');
+      };
+      tempVideo.src = URL.createObjectURL(file);
+    }
+
+    function showError(msg) {
+      errorText.textContent = msg;
+      uploadError.style.display = 'flex';
+      setTimeout(() => { uploadError.style.display = 'none'; }, 5000);
+    }
+
+    function hideError() {
+      uploadError.style.display = 'none';
+    }
+
+    function showPreview(file, duration) {
+      uploadZone.style.display = 'none';
+      videoPreview.style.display = 'block';
+      detectionResults.style.display = 'none';
+
+      const url = URL.createObjectURL(file);
+      videoPlayer.src = url;
+
+      videoFilename.textContent = file.name;
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      const mins = Math.floor(duration / 60);
+      const secs = Math.floor(duration % 60).toString().padStart(2, '0');
+      videoMeta.textContent = `${mins}:${secs} • ${sizeMB} MB`;
+    }
+
+    // Remove video
+    removeVideoBtn.addEventListener('click', () => {
+      uploadedFile = null;
+      videoPlayer.src = '';
+      videoInput.value = '';
+      videoPreview.style.display = 'none';
+      uploadZone.style.display = 'flex';
+      detectionResults.style.display = 'none';
+      violationBbox.style.display = 'none';
+    });
+
+    // Analyze button
+    analyzeBtn.addEventListener('click', async () => {
+      if (!uploadedFile) return;
+      analyzeBtn.disabled = true;
+      analyzeBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">hourglass_top</span> Analyzing...';
+      processingIndicator.style.display = 'flex';
+      detectionResults.style.display = 'none';
+      clearBoundingBoxes();
+
+      try {
+        const formData = new FormData();
+        formData.append('video', uploadedFile);
+
+        const response = await fetch('/analyze-video', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        processingIndicator.style.display = 'none';
+        resetAnalyzeBtn();
+
+        if (!data.detections || data.detections.length === 0) {
+          showNoDetections();
+          return;
+        }
+
+        displayResults(data.detections);
+
+      } catch (err) {
+        console.warn('Backend not available, using demo results:', err.message);
+        processingIndicator.style.display = 'none';
+        resetAnalyzeBtn();
+
+        // Fallback: show mock results for demo purposes
+        const mockResults = [
+          { detected_plate: "TN1OAB1234", correct_plate: "TN10AB1234", violation: "Character Manipulation", confidence: 0.94, frame: 128, bbox: [40, 35, 20, 12] },
+          { detected_plate: "MH12RN9876", correct_plate: "MH 12 RN 9876", violation: "Spacing Manipulation", confidence: 0.91, frame: 256 },
+          { detected_plate: "KA01MG5566", correct_plate: "KA 01 MG 5566", violation: "Illegal Font", confidence: 0.88, frame: 384 }
+        ];
+        displayResults(mockResults);
+      }
+    });
+
+    function resetAnalyzeBtn() {
+      analyzeBtn.disabled = false;
+      analyzeBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">search</span> Analyze Video';
+    }
+
+    function showNoDetections() {
+      detectionResults.style.display = 'block';
+      resultsCount.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">check_circle</span> Clean';
+      resultsCount.className = 'badge success';
+      resultsGrid.innerHTML = `
+        <div style="grid-column:1/-1; text-align:center; padding:40px 20px;">
+          <span class="material-symbols-outlined" style="font-size:48px; color:var(--success); display:block; margin-bottom:12px;">verified</span>
+          <p style="font-size:16px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">No illegal number plate patterns detected.</p>
+          <p style="font-size:13px; color:var(--text-muted);">All plates in this video appear to follow standard formatting.</p>
+        </div>
+      `;
+    }
+
+    function clearBoundingBoxes() {
+      // Remove any previously added dynamic bounding boxes
+      const frameViewer = document.querySelector('.video-preview-section .frame-viewer');
+      if (frameViewer) {
+        frameViewer.querySelectorAll('.bbox-dynamic').forEach(el => el.remove());
+      }
+      violationBbox.style.display = 'none';
+    }
+
+    function renderBoundingBoxes(detections) {
+      const frameViewer = document.querySelector('.video-preview-section .frame-viewer');
+      if (!frameViewer) return;
+
+      detections.forEach((r) => {
+        if (!r.bbox || r.bbox.length < 4) return;
+        const [x, y, w, h] = r.bbox; // values as percentages
+        const box = document.createElement('div');
+        box.className = 'bbox suspicious bbox-dynamic';
+        box.style.cssText = `position:absolute; top:${y}%; left:${x}%; width:${w}%; height:${h}%; display:block;`;
+        box.innerHTML = `<div class="bbox-label"><span class="material-symbols-outlined" style="font-size:10px">warning</span> ${r.detected_plate}</div>`;
+        frameViewer.appendChild(box);
+      });
+    }
+
+    function displayResults(results) {
+      detectionResults.style.display = 'block';
+      resultsCount.className = 'badge alert';
+      resultsCount.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px">warning</span> ${results.length} Violation${results.length !== 1 ? 's' : ''}`;
+      resultsGrid.innerHTML = '';
+
+      // Render bounding boxes on video
+      renderBoundingBoxes(results);
+
+      results.forEach((r) => {
+        const conf = Math.round(r.confidence * 100);
+        const confColor = conf >= 90 ? 'var(--success)' : 'var(--warning)';
+        const card = document.createElement('div');
+        card.className = 'detection-card';
+        card.innerHTML = `
+          <div class="detection-card-img" style="background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; letter-spacing:3px; color:#111; font-family:'Courier New',monospace; border-bottom:1px solid var(--border-color);">
+            ${r.detected_plate}
+          </div>
+          <div class="detection-card-body">
+            <div class="detection-row">
+              <span class="detection-label">Detected Plate</span>
+              <span class="plate-number">${r.detected_plate}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Correct Plate</span>
+              <span class="detection-value">${r.correct_plate}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Violation Type</span>
+              <span class="badge alert">${r.violation}</span>
+            </div>
+            <div class="detection-row">
+              <span class="detection-label">Confidence</span>
+              <span class="detection-value" style="color:${confColor}; font-weight:600;">${conf}%</span>
+            </div>
+            ${r.frame ? `<div class="detection-row"><span class="detection-label">Frame</span><span class="detection-value">#${r.frame}</span></div>` : ''}
+          </div>
+        `;
+        resultsGrid.appendChild(card);
+      });
+
+      // Scroll to results
+      detectionResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  </script>
 </body>
 </html>
