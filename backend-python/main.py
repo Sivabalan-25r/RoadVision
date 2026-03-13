@@ -52,8 +52,6 @@ app.add_middleware(
 
 # ---- Serve frontend static files ----
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), '..')
-if os.path.exists(os.path.join(FRONTEND_DIR, 'index.html')):
-    app.mount("/static", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 
 # ---- Health Check ----
@@ -265,16 +263,6 @@ async def analyze_video(video: UploadFile = File(...)):
                 pass
 
 
-# ---- Root redirect ----
-@app.get("/")
-async def root():
-    return {
-        "message": "RoadVision API v2.0 — YOLOv8 + PaddleOCR Pipeline",
-        "docs": "/docs",
-        "health": "/health",
-        "analyze": "POST /analyze-video",
-        "live": "GET /api/live-detections",
-    }
 
 
 # ---- Live Monitoring Endpoint ----
@@ -406,3 +394,7 @@ async def process_camera_frame(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Frame processing error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# ---- Mount Frontend Application (Must be last) ----
+if os.path.exists(os.path.join(FRONTEND_DIR, 'index.html')):
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
