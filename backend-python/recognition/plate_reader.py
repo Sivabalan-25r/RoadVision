@@ -20,6 +20,12 @@ import cv2      # type: ignore
 import numpy as np  # type: ignore
 
 try:
+    from ultralytics import YOLO # type: ignore
+    import torch                # type: ignore
+except ImportError:
+    pass
+
+try:
     from recognition.crnn_recognizer import recognize_plate # type: ignore
 except ImportError:
     # Fallback for linter/environment issues
@@ -35,19 +41,24 @@ PLATE_MODEL_PATH = os.path.join(
 )
 
 # Aggressive filtering to eliminate background ghosts
-DETECTION_CONF = 0.65 
+DETECTION_CONF = 0.25  # YOLO detection confidence threshold (Lowered to catch more plates)
+DETECTION_IMGSZ = 320  # Input size (320 = ~3x faster than 640, max speed mode)
+USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
 
-# ---- Geometric Filter Thresholds (tuned for Indian roads) ----
-MIN_ASPECT_RATIO = 2.0   # w/h minimum (Indian plates are wide)
-MAX_ASPECT_RATIO = 5.0   # w/h maximum
-MIN_PLATE_AREA = 3000    # Minimum pixels
+# ---- Geometric Filter Thresholds (tuned for Indian plates) ----
+MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line plates on bikes)
+MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
+MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
+MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
+MIN_PLATE_AREA = 750     # Minimum area in pixels
 MAX_PLATE_AREA = 100000  # Reject anything taking too much screen (likely error)
+MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area (rejects windshield detections)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.5 
+OCR_MIN_CONFIDENCE = 0.25  # Minimum OCR confidence to accept
 
 # ---- Text Cleaning ----
-MIN_CLEANED_LENGTH = 6
+MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
 MAX_CLEANED_LENGTH = 12
 
 OCR_CORRECTIONS = {
@@ -73,8 +84,6 @@ def load_plate_model():
     if _plate_model is not None:
         return _plate_model
 
-    from ultralytics import YOLO # type: ignore
-    import torch                # type: ignore
     import functools
 
     if not os.path.exists(PLATE_MODEL_PATH):
@@ -101,9 +110,18 @@ def load_plate_model():
 
 def _get_plate_model():
     """Return the already-loaded YOLO model (singleton)."""
-    global _plate_model
+    global _plate_model, USE_HALF
     if _plate_model is None:
-        return load_plate_model()
+        _plate_model = load_plate_model()
+    
+    # Auto-detect CUDA for half precision on first call
+    try:
+        if torch.cuda.is_available():
+            USE_HALF = True
+            logger.info("CUDA detected — enabling FP16 half precision for speed")
+    except Exception:
+        pass
+    
     return _plate_model
 
 
@@ -111,13 +129,16 @@ def _get_plate_model():
 
 def passes_geometric_filter(
     x1: int, y1: int, x2: int, y2: int,
+    frame_width: int = 0, frame_height: int = 0,
 ) -> bool:
     """
     Apply geometric filters to a detected plate bounding box.
 
     Rejects if:
-      - Aspect ratio (w/h) outside [2.0, 5.0]
-      - Area < 3000 pixels
+      - Aspect ratio (w/h) outside [1.5, 7.0]
+      - Width < 50 or height < 15
+      - Area < 750 pixels
+      - Area > 15% of frame (rejects windshield/window detections)
     """
     w = x2 - x1
     h = y2 - y1
@@ -132,6 +153,12 @@ def passes_geometric_filter(
     ratio = w / h
     if ratio < MIN_ASPECT_RATIO or ratio > MAX_ASPECT_RATIO:
         return False
+    
+    # Reject detections that are too large (e.g., windshield, full vehicle)
+    if frame_width > 0 and frame_height > 0:
+        frame_area = frame_width * frame_height
+        if area > frame_area * MAX_PLATE_AREA_RATIO:
+            return False
 
     return True
 
@@ -178,10 +205,140 @@ def preprocess_plate_variants(plate_crop: np.ndarray) -> List[np.ndarray]:
     return variants
 
 
+def _detect_noise_level(image: np.ndarray) -> float:
+    """
+    Detect noise level in an image using Laplacian variance.
+    """
+    laplacian = cv2.Laplacian(image, cv2.CV_64F)
+    variance = laplacian.var()
+    return variance
+
+
+def _apply_multiple_thresholds(image: np.ndarray) -> np.ndarray:
+    """
+    Apply multiple threshold methods and select the best result.
+    """
+    # Method 1: Adaptive Gaussian
+    thresh_gaussian = cv2.adaptiveThreshold(
+        image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+    )
+    
+    # Method 2: Adaptive Mean
+    thresh_mean = cv2.adaptiveThreshold(
+        image, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2
+    )
+    
+    # Method 3: OTSU
+    _, thresh_otsu = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    def edge_density(img):
+        edges = cv2.Canny(img, 50, 150)
+        return np.sum(edges > 0) / img.size
+    
+    candidates = [
+        (thresh_gaussian, edge_density(thresh_gaussian)),
+        (thresh_mean, edge_density(thresh_mean)),
+        (thresh_otsu, edge_density(thresh_otsu))
+    ]
+    
+    best_thresh, _ = max(candidates, key=lambda x: x[1])
+    return best_thresh
+
+
+def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
+    """
+    Preprocess a plate crop for OCR recognition with adaptive pipeline.
+    """
+    if len(plate_crop.shape) == 3:
+        gray = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = plate_crop.copy()
+
+    # Aggressive upscaling
+    h, w = gray.shape
+    target_height = 160
+    
+    if h < target_height:
+        scale = target_height / h
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        h, w = gray.shape
+    
+    gray = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    
+    kernel_sharpen = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
+    thresh = _apply_multiple_thresholds(sharpened)
+    
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 2))
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+
+    target_width = 400
+    aspect_ratio = w / h if h > 0 else 1
+    target_height = int(target_width / aspect_ratio)
+    target_height = max(80, min(200, target_height))
+    
+    return cv2.resize(thresh, (target_width, target_height), interpolation=cv2.INTER_CUBIC)
+
 def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     """Legacy wrapper for single-crop logic."""
     variants = preprocess_plate_variants(plate_crop)
     return variants[2] # Return the sharpened one as default
+
+
+# ---- Bounding Box Refinement ----
+
+def _refine_bounding_box(
+    plate_crop: np.ndarray,
+    original_bbox: Tuple[int, int, int, int]
+) -> Tuple[Optional[np.ndarray], Tuple[int, int, int, int]]:
+    """
+    Apply light padding to YOLO bounding box to remove vehicle body.
+    
+    Only trims a small border — does NOT use contour detection,
+    which was previously cutting off the last digits of plates.
+    
+    Args:
+        plate_crop: Original BGR plate crop from YOLO detection
+        original_bbox: Original (x1, y1, x2, y2) coordinates
+        
+    Returns:
+        Tuple of (refined_crop, refined_bbox)
+    """
+    if plate_crop is None or plate_crop.size == 0:
+        return None, original_bbox
+    
+    h, w = plate_crop.shape[:2]
+    x1_orig, y1_orig, x2_orig, y2_orig = original_bbox
+    
+    # Only trim 2% from edges — enough to remove border noise
+    # without cutting off characters at the edges
+    padding_percent = 0.02
+    pad_x = int(w * padding_percent)
+    pad_y = int(h * padding_percent)
+    
+    # Safety: never crop more than a few pixels
+    pad_x = min(pad_x, 5)
+    pad_y = min(pad_y, 3)
+    
+    # Ensure we don't over-crop tiny plates
+    if pad_x * 2 >= w or pad_y * 2 >= h:
+        return plate_crop, original_bbox
+    
+    cropped = plate_crop[pad_y:h-pad_y, pad_x:w-pad_x]
+    
+    if cropped.size == 0:
+        return plate_crop, original_bbox
+    
+    new_x1 = x1_orig + pad_x
+    new_y1 = y1_orig + pad_y
+    new_x2 = x2_orig - pad_x
+    new_y2 = y2_orig - pad_y
+    
+    return cropped, (new_x1, new_y1, new_x2, new_y2)
 
 
 # ---- YOLO Detection ----
@@ -200,11 +357,16 @@ def detect_plates(
       - 'raw_crop': original BGR plate crop
       - 'confidence': YOLO detection confidence
     """
-    model: Any = _get_plate_model()
-    results: Any = model(frame, verbose=False, conf=DETECTION_CONF)
+    model = _get_plate_model()
+    results = model(
+        frame,
+        verbose=False,
+        conf=DETECTION_CONF,
+        imgsz=DETECTION_IMGSZ,
+        half=USE_HALF,
+        agnostic_nms=True,
+    )
     detections: List[Dict[str, Any]] = []
-    
-    # Initialize with definite types for linter
     filtered_count: int = 0
     detection_idx: int = 0
 
@@ -244,9 +406,15 @@ def detect_plates(
             clamped_x2 = min(w_img, x2)
             clamped_y2 = min(h_img, y2)
 
-            # Apply geometric filters
-            if not passes_geometric_filter(clamped_x1, clamped_y1, clamped_x2, clamped_y2):
-                filtered_count = filtered_count + 1 # type: ignore
+            # Apply geometric filters (pass frame dimensions for max area check)
+            if not passes_geometric_filter(clamped_x1, clamped_y1, clamped_x2, clamped_y2, w_img, h_img):
+                filtered_count += 1 # type: ignore
+                w, h = clamped_x2 - clamped_x1, clamped_y2 - clamped_y1
+                ratio = w / h if h > 0 else 0
+                logger.debug(
+                    f"Filtered plate: size={w}x{h}, ratio={ratio:.2f}, "
+                    f"conf={conf:.2f}"
+                )
                 continue
 
             # Crop the plate region
@@ -256,12 +424,26 @@ def detect_plates(
             if raw_crop.size == 0:
                 continue
 
+            # Apply tight bounding box refinement to remove vehicle body/background
+            refined_crop, refined_bbox = _refine_bounding_box(raw_crop, (x1, y1, x2, y2))
+            if refined_crop is None or refined_crop.size == 0:
+                logger.debug(f"Bounding box refinement failed for detection {detection_idx}")
+                continue
+            
+            # Update coordinates with refined bbox
+            x1, y1, x2, y2 = refined_bbox
+
             # Save debug image
             debug_path = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_raw.png')
-            cv2.imwrite(debug_path, raw_crop)
+            if refined_crop is not None:
+                cv2.imwrite(debug_path, refined_crop)
+                logger.info(f"Saved debug plate: {debug_path} (size: {refined_crop.shape})")
 
-            # Preprocess for recognition (upscale → CLAHE → blur → Sharpen)
-            processed = preprocess_plate_crop(raw_crop)
+                # Preprocess for recognition (upscale → CLAHE → blur → Sharpen)
+                processed = preprocess_plate_crop(refined_crop)
+            else:
+                # Fallback to raw crop if refinement failed
+                processed = preprocess_plate_crop(raw_crop)
 
             # Save preprocessed debug image
             debug_path_proc = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_processed.png')
@@ -272,10 +454,10 @@ def detect_plates(
             detections.append({
                 'bbox': [clamped_x1, clamped_y1, w_box, h_box],
                 'crop': processed,
-                'raw_crop': raw_crop,
+                'raw_crop': refined_crop,
                 'confidence': conf,
             })
-            detection_idx = detection_idx + 1 # type: ignore
+            detection_idx += 1 # type: ignore
 
     if filtered_count > 0:
         logger.debug(f"Filtered {filtered_count} plates by geometric constraints")
@@ -323,15 +505,15 @@ def is_garbage_text(text: str) -> bool:
         if re.match(r"^(..)\1+$", str(text)):
             return True
 
-    # Low entropy
+    # Low entropy (made more lenient)
     unique_ratio = len(set(text)) / len(text)
-    if unique_ratio < 0.25 and len(text) >= 6:
+    if unique_ratio < 0.20 and len(text) >= 8:  # Only reject if very low entropy AND long
         return True
 
-    # Must have at least 2 letters (state code) and 2 digits
+    # Must have at least 1 letter and 1 digit
     letter_count = sum(1 for c in text if c.isalpha())
     digit_count = sum(1 for c in text if c.isdigit())
-    if letter_count < 2 or digit_count < 2:
+    if letter_count < 1 or digit_count < 1:
         return True
 
     # No single character should repeat more than 4 times
@@ -353,9 +535,118 @@ def normalize_plate(text: str) -> str:
 
 # ---- Public API ----
 
+def _validate_indian_plate_format(text: str) -> bool:
+    """
+    Validate that OCR result matches Indian plate format.
+    
+    Expected format: AA NN AA NNNN
+    - AA: State code (2 letters)
+    - NN: District code (2 digits)
+    - AA: Series letters (1-3 letters)
+    - NNNN: Registration number (1-4 digits)
+    
+    Total length: 6-11 characters (min: AA NN A N, max: AA NN AAA NNNN)
+    
+    Returns:
+        True if text matches expected format, False otherwise.
+    """
+    if not text or len(text) < 6 or len(text) > 12:  # Relaxed max length
+        return False
+    
+    # Relaxed Indian plate pattern: at least 2 letters, 2 digits, then letters and digits
+    # This catches more variations while still filtering garbage
+    pattern = re.compile(r'^[A-Z]{2}\d{2}[A-Z0-9]{2,8}$')
+    return bool(pattern.match(text))
+
+
+def _apply_position_based_corrections(text: str) -> str:
+    """
+    Apply character corrections based on expected position in Indian plate format.
+    
+    Format: AA NN AA NNNN
+    - Positions 0-1: MUST be letters (state code)
+    - Positions 2-3: MUST be digits (district code)
+    - Positions 4+: Series (letters) followed by registration number (digits)
+    
+    Returns:
+        Corrected text with position-based character substitutions.
+    """
+    if len(text) < 6:
+        return text
+    
+    corrected = list(text)
+    
+    # Positions 0-1: State code (MUST be letters)
+    for i in range(min(2, len(text))):
+        ch = text[i]
+        if ch.isdigit():
+            # Digit in letter position - try to convert
+            digit_to_letter = {'0': 'O', '1': 'I', '8': 'B', '5': 'S', '2': 'Z', '6': 'G', '4': 'A', '7': 'T'}
+            if ch in digit_to_letter:
+                corrected[i] = digit_to_letter[ch]
+    
+    # Positions 2-3: District code (MUST be digits)
+    for i in range(2, min(4, len(text))):
+        ch = text[i]
+        if ch.isalpha():
+            # Letter in digit position - try to convert
+            letter_to_digit = {'O': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2', 'G': '6', 'D': '0', 'Q': '0', 'T': '7', 'A': '4'}
+            if ch in letter_to_digit:
+                corrected[i] = letter_to_digit[ch]
+    
+    # Positions 4+: Series (1-3 letters) followed by registration number (1-4 digits)
+    if len(text) > 4:
+        suffix = text[4:] # type: ignore
+        
+        # Find where series ends and number begins
+        # Strategy: Look for the first sequence of consecutive digits
+        # Everything before that is series, everything after is registration number
+        series_end = len(suffix)  # Default: all series (no digits found)
+        
+        for j in range(len(suffix)):
+            ch_suffix = str(suffix[j])
+            if ch_suffix.isdigit():
+                # Found first digit - this is where registration number starts
+                series_end = j
+                break
+        
+        # Clamp series length to max 3 letters
+        if series_end > 3:
+            series_end = 3
+        
+        # Series positions: MUST be letters
+        for j in range(series_end):
+            idx = 4 + j
+            if idx < len(text):
+                ch = text[idx]
+                ch_str = str(ch)
+                if ch_str.isdigit():
+                    digit_to_letter = {'0': 'O', '1': 'I', '8': 'B', '5': 'S', '2': 'Z', '6': 'G', '4': 'A', '7': 'T'}
+                    if ch_str in digit_to_letter:
+                        corrected[idx] = digit_to_letter[ch_str]
+        
+        # Registration number positions: MUST be digits
+        for j in range(series_end, len(suffix)):
+            idx = 4 + j
+            if idx < len(text):
+                ch = text[idx]
+                ch_str = str(ch)
+                if ch_str.isalpha():
+                    letter_to_digit = {'O': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2', 'G': '6', 'D': '0', 'Q': '0', 'T': '7', 'A': '4'}
+                    if ch_str in letter_to_digit:
+                        corrected[idx] = letter_to_digit[ch_str]
+    
+    return ''.join(corrected)
+
+
 def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Optional[str]:
     """
     Read text from a plate crop image using an Ensemble OCR strategy.
+    
+    Pipeline:
+      1. Run OCR on multiple image variants
+      2. Scoring and validation
+      3. Return best candidate
     """
     if plate_image is None or plate_image.size == 0:
         return None
@@ -373,6 +664,10 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
                 continue
                 
             cleaned = clean_text(raw_text)
+            
+            # Apply position-based corrections
+            cleaned = _apply_position_based_corrections(cleaned)
+            
             if is_garbage_text(cleaned):
                 continue
             

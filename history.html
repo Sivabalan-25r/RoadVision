@@ -5,9 +5,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — History</title>
   <meta name="description" content="RoadVision detection history — browse all scanned vehicles, registrations, violations, and timestamps." />
-  <style>html,body{background:#020617;margin:0;padding:0;}</style>
+  <style>
+    html,body{background:#020617;margin:0;padding:0;}
+    .plate-thumbnail {
+      width: 120px;
+      height: 40px;
+      overflow: hidden;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+      background: var(--card-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .plate-thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .plate-thumbnail-placeholder {
+      width: 120px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--slate-800);
+      color: var(--text-muted);
+      font-size: 11px;
+      border-radius: var(--radius-sm);
+      border: 1px dashed var(--border-color);
+    }
+    .plate-number {
+      font-family: 'Roboto Mono', monospace;
+      letter-spacing: 1px;
+      font-weight: 700;
+      color: var(--primary);
+      background: var(--primary-glow);
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(59,130,246,0.3);
+    }
+  </style>
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body>
   <div class="app-layout">
@@ -23,9 +66,15 @@
       <div class="main-content">
         <div class="section-header" style="margin-bottom:24px;">
           <h2>Detection History</h2>
-          <span class="badge" id="historyCount" style="background:var(--surface-secondary); color:var(--text);">
-            <span id="historyNumber">0</span> Records
-          </span>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <span class="badge" id="historyCount" style="background:var(--surface-secondary); color:var(--text);">
+              <span id="historyNumber">0</span> Records
+            </span>
+            <button class="btn-primary" id="exportPdfBtn" style="display:none; gap:6px; padding:8px 16px; font-size:13px;">
+              <span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span>
+              Export PDF
+            </button>
+          </div>
         </div>
 
         <!-- Loading State -->
@@ -57,11 +106,11 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Detected Registration</th>
-                  <th>Correct Registration</th>
-                  <th>Violation</th>
+                  <th>Plate ID</th>
+                  <th>Plate Image</th>
+                  <th>Status</th>
                   <th>Confidence</th>
-                  <th>Frame</th>
+                  <th>Time / Frame</th>
                   <th style="text-align:right">Actions</th>
                 </tr>
               </thead>
@@ -97,6 +146,7 @@
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
   <script src="components/pagination.js"></script>
+  <script src="api-client.js"></script>
   <script>
     // ============ Load Real History ============
     const historyTableBody = document.getElementById('historyTableBody');
@@ -105,17 +155,10 @@
     const emptyState = document.getElementById('emptyState');
     const historyNumber = document.getElementById('historyNumber');
 
-    function loadHistory() {
-      const detectionsData = localStorage.getItem('roadvision_detections');
-      
-      if (!detectionsData) {
-        loadingState.style.display = 'none';
-        emptyState.style.display = 'block';
-        return;
-      }
-
+    async function loadHistory() {
       try {
-        const detections = JSON.parse(detectionsData);
+        // Get all detections from database
+        const detections = await RoadVisionAPI.Detection.getAll(false, 100);
         
         if (detections.length === 0) {
           loadingState.style.display = 'none';
@@ -129,20 +172,24 @@
         // Render table rows
         historyTableBody.innerHTML = detections.map((det, index) => {
           const confidence = Math.round(det.confidence * 100);
-          const badgeClass = det.violation ? 
-            (det.violation.includes('Tampered') ? 'alert' : 
-             det.violation.includes('Spacing') ? 'warning' : 'alert') : 'success';
-          const violationText = det.violation || 'None (Legal)';
+          const badgeClass = det.violation ? 'alert' : 'success';
+          const statusText = det.violation ? `ILLEGAL: ${det.violation}` : 'LEGAL';
+          const timeStr = det.timestamp ? new Date(det.timestamp).toLocaleTimeString('en-US', { hour12: false }) : `Frame ${det.frame}`;
+          
+          // Thumbnail logic
+          const thumbnailHtml = det.plate_image 
+            ? `<div class="plate-thumbnail"><img src="data:image/jpeg;base64,${det.plate_image}" alt="Plate" /></div>`
+            : `<div class="plate-thumbnail-placeholder">No Image</div>`;
 
           return `
             <tr>
               <td><span class="plate-number">${det.detected_plate}</span></td>
-              <td style="color:var(--text-secondary)">${det.correct_plate}</td>
-              <td><span class="badge ${badgeClass}">${violationText}</span></td>
+              <td>${thumbnailHtml}</td>
+              <td><span class="badge ${badgeClass}">${statusText}</span></td>
               <td style="color:var(--success); font-weight:600;">${confidence}%</td>
-              <td style="color:var(--text-muted);">Frame ${det.frame}</td>
+              <td style="color:var(--text-muted); font-size:12px;">${timeStr}</td>
               <td style="text-align:right">
-                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate}', '${violationText}', ${confidence})">
+                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate || det.detected_plate}', '${statusText}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
                   <span class="material-symbols-outlined">visibility</span>
                 </button>
               </td>
@@ -153,6 +200,10 @@
         // Show table, hide loading
         loadingState.style.display = 'none';
         historyTable.style.display = 'block';
+        document.getElementById('exportPdfBtn').style.display = 'inline-flex';
+
+        // Store detections globally for PDF export
+        window._historyDetections = detections;
 
       } catch (e) {
         console.error('Error loading history:', e);
@@ -174,9 +225,14 @@
       if (e.target === evidenceModal) evidenceModal.classList.remove('active');
     });
 
-    function viewDetails(plate, corrected, violation, confidence) {
-      const evidence = getEvidenceByPlate(plate);
-      const imgSrc = evidence ? evidence.image : '';
+    function viewDetails(plate, corrected, violation, confidence, vehicleInfo, plateImage) {
+      // Use plate_image from database if available, otherwise try evidence store
+      let imgSrc = plateImage || '';
+      
+      if (!imgSrc) {
+        const evidence = getEvidenceByPlate(plate);
+        imgSrc = evidence ? evidence.image : '';
+      }
 
       if (imgSrc) {
         evidenceModalImg.src = imgSrc;
@@ -210,6 +266,145 @@
 
     // Load history on page load
     window.addEventListener('load', loadHistory);
+
+    // ============ PDF Export ============
+    document.getElementById('exportPdfBtn').addEventListener('click', generatePDF);
+
+    function generatePDF() {
+      const detections = window._historyDetections;
+      if (!detections || detections.length === 0) {
+        alert('No detections to export.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // ---- Header ----
+      doc.setFillColor(2, 6, 23); // Dark background
+      doc.rect(0, 0, pageWidth, 40, 'F');
+      doc.setFontSize(22);
+      doc.setTextColor(99, 102, 241); // Primary blue
+      doc.text('RoadVision', 14, 18);
+      doc.setFontSize(10);
+      doc.setTextColor(148, 163, 184); // Muted text
+      doc.text('AI-Powered Traffic Surveillance Report', 14, 26);
+      
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      doc.text(`Generated: ${dateStr} at ${timeStr}`, 14, 33);
+
+      // ---- Summary Stats ----
+      const totalDetections = detections.length;
+      const violations = detections.filter(d => d.violation).length;
+      const legal = totalDetections - violations;
+      const registered = detections.filter(d => d.vehicle_registered || (d.vehicle_info && d.vehicle_info.registered)).length;
+      const unregistered = totalDetections - registered;
+      const avgConf = detections.reduce((sum, d) => sum + (d.confidence || 0), 0) / totalDetections;
+
+      doc.setFontSize(14);
+      doc.setTextColor(30, 41, 59);
+      doc.text('Summary', 14, 52);
+
+      doc.autoTable({
+        startY: 56,
+        head: [['Total Scanned', 'Violations', 'Legal', 'Registered', 'Unregistered', 'Avg Confidence']],
+        body: [[totalDetections, violations, legal, registered, unregistered, Math.round(avgConf * 100) + '%']],
+        theme: 'grid',
+        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontSize: 9, halign: 'center' },
+        bodyStyles: { halign: 'center', fontSize: 10 },
+        margin: { left: 14, right: 14 },
+      });
+
+      // ---- Detections Table ----
+      const tableY = doc.lastAutoTable.finalY + 12;
+      doc.setFontSize(14);
+      doc.setTextColor(30, 41, 59);
+      doc.text('Detection Details', 14, tableY);
+
+      const tableData = detections.map((det, i) => {
+        const conf = Math.round((det.confidence || 0) * 100) + '%';
+        const violation = det.violation || 'None (Legal)';
+        let status = 'Unknown';
+        if (det.vehicle_info) {
+          status = det.vehicle_info.registered ? 'Registered' : 'Unregistered';
+        } else if (det.vehicle_registered !== undefined) {
+          status = det.vehicle_registered ? 'Registered' : 'Unregistered';
+        }
+        const timestamp = det.timestamp
+          ? new Date(det.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+          : 'N/A';
+        return [
+          i + 1,
+          det.detected_plate || 'N/A',
+          det.correct_plate || det.detected_plate || 'N/A',
+          violation,
+          status,
+          conf,
+          timestamp
+        ];
+      });
+
+      doc.autoTable({
+        startY: tableY + 4,
+        head: [['#', 'Detected Plate', 'Corrected Plate', 'Violation', 'Status', 'Confidence', 'Time']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontSize: 8, halign: 'center' },
+        bodyStyles: { fontSize: 8, valign: 'middle' },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 8 },
+          1: { fontStyle: 'bold', cellWidth: 28 },
+          2: { cellWidth: 28 },
+          3: { cellWidth: 32 },
+          4: { halign: 'center', cellWidth: 22 },
+          5: { halign: 'center', cellWidth: 18 },
+          6: { cellWidth: 30 }
+        },
+        margin: { left: 14, right: 14 },
+        didParseCell: function(data) {
+          // Color violation cells
+          if (data.section === 'body' && data.column.index === 3) {
+            const val = data.cell.raw;
+            if (val && val !== 'None (Legal)') {
+              data.cell.styles.textColor = [220, 38, 38]; // Red
+              data.cell.styles.fontStyle = 'bold';
+            } else {
+              data.cell.styles.textColor = [34, 197, 94]; // Green
+            }
+          }
+          // Color status cells
+          if (data.section === 'body' && data.column.index === 4) {
+            const val = data.cell.raw;
+            if (val === 'Unregistered') {
+              data.cell.styles.textColor = [220, 38, 38];
+            } else if (val === 'Registered') {
+              data.cell.styles.textColor = [34, 197, 94];
+            }
+          }
+        }
+      });
+
+      // ---- Footer on each page ----
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `RoadVision Report — Page ${p} of ${totalPages}`,
+          pageWidth / 2, pageHeight - 8,
+          { align: 'center' }
+        );
+      }
+
+      // Save the PDF
+      const filename = `RoadVision_Report_${now.toISOString().slice(0, 10)}.pdf`;
+      doc.save(filename);
+    }
   </script>
 </body>
 </html>

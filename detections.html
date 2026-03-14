@@ -76,6 +76,7 @@
   <script src="components/loader.js"></script>
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
+  <script src="api-client.js"></script>
   <script>
     // ============ Load Real Detections ============
     const detectionsGrid = document.getElementById('detectionsGrid');
@@ -83,23 +84,11 @@
     const emptyState = document.getElementById('emptyState');
     const flaggedNumber = document.getElementById('flaggedNumber');
 
-    // Load detections from localStorage (saved from dashboard upload)
-    function loadDetections() {
-      const detectionsData = localStorage.getItem('roadvision_detections');
-      
-      if (!detectionsData) {
-        // No detections found
-        loadingState.style.display = 'none';
-        emptyState.style.display = 'block';
-        flaggedNumber.textContent = '0';
-        return;
-      }
-
+    // Load detections from database (saved from dashboard upload or live monitoring)
+    async function loadDetections() {
       try {
-        const detections = JSON.parse(detectionsData);
-        
-        // Filter only violations
-        const violations = detections.filter(d => d.violation);
+        // Get only violations from database
+        const violations = await RoadVisionAPI.Detection.getAll(true);
         
         if (violations.length === 0) {
           loadingState.style.display = 'none';
@@ -117,14 +106,17 @@
           const badgeClass = det.violation.includes('Tampered') ? 'alert' : 
                             det.violation.includes('Spacing') ? 'warning' : 'alert';
           
-          // Try to get evidence image
-          const evidence = getEvidenceByPlate(det.detected_plate);
-          const plateImg = evidence && evidence.image ? evidence.image : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="60"%3E%3Crect width="200" height="60" fill="%23f0f0f0"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-family="Arial" font-size="12"%3ENo Image%3C/text%3E%3C/svg%3E';
+          // Use plate_image from detection if available, otherwise try evidence store
+          let plateImg = det.plate_image;
+          if (!plateImg) {
+            const evidence = getEvidenceByPlate(det.detected_plate);
+            plateImg = evidence && evidence.image ? evidence.image : 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="60"%3E%3Crect width="200" height="60" fill="%23f0f0f0"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-family="Arial" font-size="12"%3ENo Image%3C/text%3E%3C/svg%3E';
+          }
 
           return `
             <div class="detection-card">
-              <div class="detection-card-img" style="padding:0; overflow:hidden;">
-                <img src="${plateImg}" alt="Plate ${det.detected_plate}" style="width:100%; height:100%; object-fit:cover;" />
+              <div class="detection-card-img" style="padding:0; overflow:hidden; background:#000;">
+                <img src="${plateImg}" alt="Plate ${det.detected_plate}" style="width:100%; height:100%; object-fit:contain;" />
               </div>
               <div class="detection-card-body">
                 <div class="detection-row">
@@ -139,6 +131,26 @@
                   <span class="detection-label">Violation Type</span>
                   <span class="badge ${badgeClass}">${det.violation}</span>
                 </div>
+                ${det.vehicle_info ? `
+                <div class="detection-row">
+                  <span class="detection-label">Registration</span>
+                  <span class="badge ${det.vehicle_info.registered ? 'success' : 'alert'}">${det.vehicle_info.registered ? 'Registered' : 'Unregistered'}</span>
+                </div>
+                ${det.vehicle_info.registered ? `
+                <div class="detection-row">
+                  <span class="detection-label">Owner</span>
+                  <span class="detection-value">${det.vehicle_info.owner_name || 'N/A'}</span>
+                </div>
+                <div class="detection-row">
+                  <span class="detection-label">Vehicle Type</span>
+                  <span class="detection-value">${det.vehicle_info.vehicle_type || 'N/A'}</span>
+                </div>
+                <div class="detection-row">
+                  <span class="detection-label">Model</span>
+                  <span class="detection-value">${det.vehicle_info.model || 'N/A'}</span>
+                </div>
+                ` : ''}
+                ` : ''}
                 <div class="detection-row">
                   <span class="detection-label">Confidence</span>
                   <span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span>

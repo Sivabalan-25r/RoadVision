@@ -298,61 +298,88 @@
 
       <!-- Heading -->
       <div class="login-heading">
-        <h2>Welcome back</h2>
-        <p>Sign in to access your dashboard</p>
+        <h2>Select Camera</h2>
+        <p>Choose a camera to access its dashboard</p>
       </div>
 
       <!-- Error Banner -->
       <div class="login-error" id="loginError">
         <span class="material-symbols-outlined" style="font-size:18px">error</span>
-        <span id="loginErrorText">Invalid credentials. Please try again.</span>
+        <span id="loginErrorText">Please select a camera to continue.</span>
       </div>
 
-      <!-- Form -->
-      <form class="login-form" id="loginForm" autocomplete="on" novalidate>
+      <!-- Camera Selection -->
+      <div class="login-form" id="cameraSelection">
         <div class="form-group">
-          <label class="form-label" for="username">Username or Email</label>
-          <div class="form-input-wrap">
-            <span class="material-symbols-outlined form-input-icon">person</span>
-            <input 
-              class="form-input" 
-              id="username" 
-              name="username"
-              type="text" 
-              placeholder="admin@roadvision.ai"
-              autocomplete="username"
-            />
+          <label class="form-label">Available Cameras</label>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <button class="camera-select-btn" data-camera="1">
+              <span class="material-symbols-outlined">videocam</span>
+              <div>
+                <div style="font-weight:600; font-size:14px;">Camera 1</div>
+                <div style="font-size:12px; color:var(--text-muted);">Main Expressway North</div>
+              </div>
+              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+            </button>
+            
+            <button class="camera-select-btn" data-camera="2">
+              <span class="material-symbols-outlined">videocam</span>
+              <div>
+                <div style="font-weight:600; font-size:14px;">Camera 2</div>
+                <div style="font-size:12px; color:var(--text-muted);">City Center Junction</div>
+              </div>
+              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+            </button>
+            
+            <button class="camera-select-btn" data-camera="3">
+              <span class="material-symbols-outlined">videocam</span>
+              <div>
+                <div style="font-weight:600; font-size:14px;">Camera 3</div>
+                <div style="font-size:12px; color:var(--text-muted);">Highway Toll Plaza</div>
+              </div>
+              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+            </button>
+            
+            <button class="camera-select-btn" data-camera="4">
+              <span class="material-symbols-outlined">videocam</span>
+              <div>
+                <div style="font-weight:600; font-size:14px;">Camera 4</div>
+                <div style="font-size:12px; color:var(--text-muted);">Airport Road Entry</div>
+              </div>
+              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+            </button>
           </div>
         </div>
+      </div>
 
-        <div class="form-group">
-          <label class="form-label" for="password">Password</label>
-          <div class="form-input-wrap">
-            <span class="material-symbols-outlined form-input-icon">lock</span>
-            <input 
-              class="form-input" 
-              id="password"
-              name="password"
-              type="password" 
-              placeholder="••••••••"
-              autocomplete="current-password"
-            />
-          </div>
-        </div>
-
-        <div class="login-options">
-          <label class="checkbox-label">
-            <input type="checkbox" id="rememberMe" />
-            Remember me
-          </label>
-          <a class="forgot-link" href="#">Forgot password?</a>
-        </div>
-
-        <button class="btn-login" type="submit" id="loginBtn">
-          <span class="material-symbols-outlined" style="font-size:18px">login</span>
-          Sign In
-        </button>
-      </form>
+      <style>
+        .camera-select-btn {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 14px 16px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          color: var(--text-primary);
+          font-family: var(--font-family);
+          cursor: pointer;
+          transition: all .2s;
+          text-align: left;
+        }
+        
+        .camera-select-btn:hover {
+          background: rgba(37,99,235,0.1);
+          border-color: var(--primary);
+          transform: translateY(-2px);
+        }
+        
+        .camera-select-btn .material-symbols-outlined:first-child {
+          font-size: 28px;
+          color: var(--primary);
+        }
+      </style>
 
       <!-- Status Bar -->
       <div class="login-status-bar">
@@ -373,41 +400,32 @@
       })
       .catch(() => {/* background unavailable — no-op */});
 
-    // ---- Login Logic ----
-    const form   = document.getElementById('loginForm');
+    // ---- Camera Selection Logic ----
     const errBox = document.getElementById('loginError');
-    const errTxt = document.getElementById('loginErrorText');
-    const btn    = document.getElementById('loginBtn');
+    const cameraButtons = document.querySelectorAll('.camera-select-btn');
 
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
-
-      if (!username || !password) {
-        errTxt.textContent = 'Please enter both username and password.';
-        errBox.classList.add('show');
-        return;
-      }
-
-      // Demo auth — replace with real API call
-      btn.disabled = true;
-      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px;animation:spin .7s linear infinite">progress_activity</span> Authenticating…';
-
-      setTimeout(() => {
-        if (username === 'admin' && password === 'admin') {
-          window.location.href = 'index.html';
-        } else {
-          errTxt.textContent = 'Invalid credentials. Use admin / admin for demo.';
-          errBox.classList.add('show');
-          btn.disabled = false;
-          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">login</span> Sign In';
-        }
-      }, 1000);
+    cameraButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cameraId = btn.dataset.camera;
+        const cameraName = btn.querySelector('div > div:first-child').textContent;
+        const cameraLocation = btn.querySelector('div > div:last-child').textContent;
+        
+        // Save camera selection to localStorage
+        localStorage.setItem('roadvision_camera', JSON.stringify({
+          id: `CAM-00${cameraId}`,
+          name: cameraName,
+          location: cameraLocation,
+          resolution: '1080p',
+          latitude: '',
+          longitude: '',
+          address: '',
+          accuracy: '',
+        }));
+        
+        // Redirect to dashboard
+        window.location.href = 'index.html';
+      });
     });
-
-    // Hide error when user starts typing
-    form.addEventListener('input', () => errBox.classList.remove('show'));
   </script>
 </body>
 </html>

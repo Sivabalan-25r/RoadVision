@@ -3,10 +3,15 @@ RoadVision — Indian Number Plate Format Rules
 Validates detected plate text against Indian RTO formatting standards.
 Detects character manipulation, spacing issues, and pattern mismatches.
 Includes context-aware normalization that considers character position.
+Integrates with vehicle registration database for ownership verification.
 """
 
 import re
-from typing import Optional
+import logging
+from typing import Optional, Dict
+from registration_db import lookup_vehicle, is_registered_plate
+
+logger = logging.getLogger(__name__)
 
 # =============================================
 # Indian RTO Plate Pattern
@@ -76,22 +81,27 @@ class PlateValidationResult:
         correct_plate: Optional[str] = None,
         violation: Optional[str] = None,
         confidence_modifier: float = 1.0,
+        vehicle_info: Optional[Dict] = None,
     ):
         self.detected_plate = detected_plate
         self.correct_plate = correct_plate or detected_plate
         self.violation = violation
         self.confidence_modifier = confidence_modifier
+        self.vehicle_info = vehicle_info or {}
 
     @property
     def is_violation(self) -> bool:
         return self.violation is not None
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "detected_plate": self.detected_plate,
             "correct_plate": self.correct_plate,
             "violation": self.violation,
         }
+        if self.vehicle_info:
+            result["vehicle_info"] = self.vehicle_info
+        return result
 
 
 def normalize_plate(text: str) -> str:
@@ -201,15 +211,33 @@ def check_spacing_manipulation(original_text: str, normalized: str) -> Optional[
     """
     Check if the plate has unusual spacing designed to confuse readers.
     Valid plates should have spaces in standard positions or no spaces.
+    
+    Accepts both spaced and non-spaced formats as valid:
+    - "TN57AD3604" (no spaces)
+    - "TN 57 AD 3604" (standard spacing)
+    - "TN57 AD3604" (partial spacing)
+    
+    Only flags truly unusual patterns like:
+    - "T N57AD3604" (space within state code)
+    - "TN5 7AD3604" (space within district code)
+    - "TN57A D3604" (space within series)
+    - "TN57AD36 04" (space within registration number)
     """
     # If the original text had no spaces, no spacing issue
     if ' ' not in original_text and '-' not in original_text:
         return None
 
     # Standard Indian spacing patterns (acceptable)
+    # These patterns accept:
+    # 1. Full spacing: "AA NN AA NNNN" or "AA NN AAA NNNN"
+    # 2. No spacing: "AANNAAANNNN"
+    # 3. Partial spacing: "AA NN AANNNN", "AANN AA NNNN", etc.
+    # 4. With hyphens: "AA-NN-AA-NNNN"
     standard_patterns = [
-        re.compile(r'^[A-Z]{2}\s?\d{2}\s?[A-Z]{1,3}\s?\d{1,4}$'),
-        re.compile(r'^[A-Z]{2}\s?-?\s?\d{2}\s?-?\s?[A-Z]{1,3}\s?-?\s?\d{1,4}$'),
+        # Full format with optional spaces/hyphens between segments
+        re.compile(r'^[A-Z]{2}[\s\-]?\d{2}[\s\-]?[A-Z]{1,3}[\s\-]?\d{1,4}$'),
+        # Allow multiple spaces or hyphens
+        re.compile(r'^[A-Z]{2}[\s\-]+\d{2}[\s\-]+[A-Z]{1,3}[\s\-]+\d{1,4}$'),
     ]
 
     cleaned = original_text.upper().strip()
@@ -217,19 +245,34 @@ def check_spacing_manipulation(original_text: str, normalized: str) -> Optional[
         if pattern.match(cleaned):
             return None
 
-    # Non-standard spacing detected
-    m = PLATE_PATTERN.match(normalized)
-    if m:
-        correct = f"{m.group(1)} {m.group(2)} {m.group(3)} {m.group(4)}"
-    else:
-        correct = normalized
+    # Check for truly unusual spacing patterns (spaces WITHIN segments)
+    # These are suspicious and should be flagged
+    unusual_patterns = [
+        r'[A-Z]\s+[A-Z](?=\d)',  # Space within state code: "T N57"
+        r'\d\s+\d(?=[A-Z])',      # Space within district code: "5 7AD"
+        r'(?<=\d)[A-Z]\s+[A-Z](?=\d)',  # Space within series: "A D3604"
+        r'[A-Z]\d+\s+\d',         # Space within registration number: "AD36 04"
+    ]
+    
+    for pattern in unusual_patterns:
+        if re.search(pattern, cleaned):
+            # Truly unusual spacing detected
+            m = PLATE_PATTERN.match(normalized)
+            if m:
+                correct = f"{m.group(1)} {m.group(2)} {m.group(3)} {m.group(4)}"
+            else:
+                correct = normalized
+            
+            return PlateValidationResult(
+                detected_plate=normalized,
+                correct_plate=correct,
+                violation="Spacing Manipulation",
+                confidence_modifier=0.9,
+            )
 
-    return PlateValidationResult(
-        detected_plate=normalized,
-        correct_plate=correct,
-        violation="Spacing Manipulation",
-        confidence_modifier=0.9,
-    )
+    # If we reach here, spacing is non-standard but not suspicious
+    # Accept it as valid
+    return None
 
 
 def check_tampered_plate(plate: str) -> Optional[PlateValidationResult]:
@@ -304,7 +347,8 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
       3. Apply character normalization (I→1, O→0, B→8, S→5, Z→2)
       4. Compare original vs normalized → Character Manipulation
       5. Validate normalized plate against Indian regex
-      6. Return both detected and corrected plates
+      6. Check vehicle registration database
+      7. Return both detected and corrected plates with vehicle info
     """
     # Step 1: Store original
     original_plate = raw_text.strip().upper()
@@ -348,20 +392,11 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
         )
 
     # Priority 3: Spacing Manipulation
-    # Flag ANY plate that arrived with spaces or hyphens
+    # Only flag plates with truly unusual spacing patterns
     if has_spacing:
-        m = PLATE_PATTERN.match(corrected_plate)
-        if m:
-            formatted = f"{m.group(1)} {m.group(2)} {m.group(3)} {m.group(4)}"
-        else:
-            formatted = corrected_plate
-
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=formatted,
-            violation="Spacing Manipulation",
-            confidence_modifier=0.9,
-        )
+        spacing_result = check_spacing_manipulation(original_plate, corrected_plate)
+        if spacing_result:
+            return spacing_result
 
     # Priority 4: Pattern Mismatch (doesn't fit Indian format)
     if not PLATE_PATTERN.match(corrected_plate):
@@ -372,18 +407,39 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
             confidence_modifier=0.8,
         )
 
-    # Priority 5: Invalid State Code
+    # Priority 5: Check vehicle registration database
+    # Look up the corrected plate (after all format fixes)
+    # This check happens BEFORE invalid state code check because
+    # an unregistered vehicle is a more serious violation
+    vehicle_info = lookup_vehicle(corrected_plate)
+    logger.info(f"Registration lookup for '{corrected_plate}' (cleaned='{cleaned}'): registered={vehicle_info.get('registered')}")
+    
+    if not vehicle_info.get("registered"):
+        # Unregistered vehicle - this is a violation
+        logger.info(f"Unregistered vehicle detected: '{corrected_plate}'")
+        return PlateValidationResult(
+            detected_plate=cleaned,
+            correct_plate=corrected_plate,
+            violation="Unregistered Vehicle",
+            confidence_modifier=0.85,
+            vehicle_info=vehicle_info,
+        )
+
+    # Priority 6: Invalid State Code (only if registered check passed)
+    # This is now lower priority since we already checked registration
     if state not in VALID_STATE_CODES:
         return PlateValidationResult(
             detected_plate=cleaned,
             correct_plate=corrected_plate,
             violation="Invalid State Code",
             confidence_modifier=0.7,
+            vehicle_info=vehicle_info,
         )
 
-    # No violations — valid plate
+    # No violations — valid and registered plate
     return PlateValidationResult(
         detected_plate=cleaned,
         correct_plate=corrected_plate,
         violation=None,
+        vehicle_info=vehicle_info,
     )

@@ -32,25 +32,23 @@
 
       <!-- Main Content -->
       <div class="main-content">
-        <!-- Stat Cards -->
+        <!-- Stat Cards - Real Data Only -->
         <div class="stats-grid">
           <div class="stat-card">
             <p class="stat-label">Plates Scanned</p>
             <div class="stat-row">
-              <span class="stat-value" id="statPlatesScanned">0</span>
-              <span class="stat-trend" id="statPlatesTrend" style="display:none;">
-                <span class="material-symbols-outlined">trending_up</span>
-                <span id="statPlatesTrendValue">0%</span>
+              <span class="stat-value" id="totalPlatesScanned">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Total detected
               </span>
             </div>
           </div>
           <div class="stat-card">
             <p class="stat-label">Illegal Plates Found</p>
             <div class="stat-row">
-              <span class="stat-value" id="statIllegalPlates">0</span>
-              <span class="stat-trend" id="statIllegalTrend" style="display:none;">
-                <span class="material-symbols-outlined">trending_up</span>
-                <span id="statIllegalTrendValue">0%</span>
+              <span class="stat-value" id="illegalPlatesFound">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Violations
               </span>
             </div>
           </div>
@@ -58,10 +56,9 @@
           <div class="stat-card">
             <p class="stat-label">Detection Accuracy</p>
             <div class="stat-row">
-              <span class="stat-value" id="statAccuracy">0%</span>
-              <span class="stat-trend" id="statAccuracyTrend" style="display:none;">
-                <span class="material-symbols-outlined">trending_up</span>
-                <span id="statAccuracyTrendValue">0%</span>
+              <span class="stat-value" id="detectionAccuracy">--</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Confidence avg
               </span>
             </div>
           </div>
@@ -185,100 +182,24 @@
   <script src="components/loader.js"></script>
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
+  <script src="api-client.js"></script>
   <script>
-    // ============ Statistics Management ============
-    const STATS_KEY = 'roadvision_stats';
-
-    // Initialize or load statistics from localStorage
-    function loadStats() {
-      const saved = localStorage.getItem(STATS_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-      return {
-        totalPlatesScanned: 0,
-        totalIllegalPlates: 0,
-        totalDetections: 0,
-        averageConfidence: 0,
-        uniquePlates: new Set()
-      };
-    }
-
-    function saveStats(stats) {
-      // Convert Set to Array for JSON serialization
-      const toSave = {
-        ...stats,
-        uniquePlates: Array.from(stats.uniquePlates)
-      };
-      localStorage.setItem(STATS_KEY, JSON.stringify(toSave));
-    }
-
-    function updateStatsDisplay(stats) {
-      // Update Plates Scanned (unique plates only)
-      document.getElementById('statPlatesScanned').textContent = stats.totalPlatesScanned.toLocaleString();
-
-      // Update Illegal Plates Found
-      document.getElementById('statIllegalPlates').textContent = stats.totalIllegalPlates.toLocaleString();
-
-      // Calculate and update Detection Accuracy
-      const accuracy = stats.totalDetections > 0
-        ? ((stats.averageConfidence / stats.totalDetections) * 100).toFixed(1)
-        : 0;
-      document.getElementById('statAccuracy').textContent = accuracy + '%';
-    }
-
-    function updateStatsFromDetections(detections) {
-      let stats = loadStats();
-
-      // Convert uniquePlates array back to Set if needed
-      if (Array.isArray(stats.uniquePlates)) {
-        stats.uniquePlates = new Set(stats.uniquePlates);
-      }
-
-      let newPlatesCount = 0;
-      let newIllegalCount = 0;
-      let totalConfidence = stats.averageConfidence * stats.totalDetections;
-
-      detections.forEach(detection => {
-        const plateId = detection.detected_plate;
-
-        // Only count unique plates (no duplicates)
-        if (!stats.uniquePlates.has(plateId)) {
-          stats.uniquePlates.add(plateId);
-          newPlatesCount++;
-
-          // Count illegal plates
-          if (detection.violation) {
-            newIllegalCount++;
-          }
-
-          // Add to confidence calculation
-          totalConfidence += (detection.confidence || 0);
-          stats.totalDetections++;
+    // ============ Update Stats with Real Data ============
+    async function updateDashboardStats() {
+      try {
+        const stats = await RoadVisionAPI.Detection.getStats();
+        if (stats) {
+          document.getElementById('totalPlatesScanned').textContent = stats.total_detections || 0;
+          document.getElementById('illegalPlatesFound').textContent = stats.violations || 0;
+          document.getElementById('detectionAccuracy').textContent = (stats.avg_confidence || 0) + '%';
         }
-      });
-
-      // Update totals
-      stats.totalPlatesScanned += newPlatesCount;
-      stats.totalIllegalPlates += newIllegalCount;
-      stats.averageConfidence = stats.totalDetections > 0 ? totalConfidence : 0;
-
-      // Save and display
-      saveStats(stats);
-      updateStatsDisplay(stats);
-
-      return stats;
-    }
-
-    // Load and display stats on page load
-    document.addEventListener('DOMContentLoaded', () => {
-      const stats = loadStats();
-      if (Array.isArray(stats.uniquePlates)) {
-        stats.uniquePlates = new Set(stats.uniquePlates);
+      } catch (e) {
+        console.error('Error loading stats:', e);
       }
-      updateStatsDisplay(stats);
-    });
-
+    }
+    
+    // Update stats on page load
+    window.addEventListener('load', updateDashboardStats);
     // ============ Video Upload Logic ============
     const uploadZone = document.getElementById('uploadZone');
     const videoInput = document.getElementById('videoInput');
@@ -420,9 +341,14 @@
           return;
         }
 
-        // Save detections to localStorage for detections page
-        localStorage.setItem('roadvision_detections', JSON.stringify(data.detections));
-        console.log(`Saved ${data.detections.length} detections to localStorage`);
+        // Save detections to database
+        for (const detection of data.detections) {
+          await RoadVisionAPI.Detection.add(detection);
+        }
+        console.log(`Saved ${data.detections.length} detections to database`);
+        
+        // Update dashboard stats
+        await updateDashboardStats();
 
         displayResults(data.detections);
 
