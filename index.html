@@ -1,14 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — Dashboard</title>
-  <meta name="description" content="RoadVision AI Dashboard — upload traffic footage, detect illegal number plates, and view analysis results." />
-  <style>html,body{background:#020617;margin:0;padding:0;}</style>
+  <meta name="description"
+    content="RoadVision AI Dashboard — upload traffic footage, detect illegal number plates, and view analysis results." />
+  <style>
+    html,
+    body {
+      background: #020617;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
   <link rel="stylesheet" href="styles.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
 </head>
+
 <body>
   <div class="app-layout">
     <!-- Sidebar Slot -->
@@ -26,20 +37,20 @@
           <div class="stat-card">
             <p class="stat-label">Plates Scanned</p>
             <div class="stat-row">
-              <span class="stat-value">14,284</span>
-              <span class="stat-trend up">
+              <span class="stat-value" id="statPlatesScanned">0</span>
+              <span class="stat-trend" id="statPlatesTrend" style="display:none;">
                 <span class="material-symbols-outlined">trending_up</span>
-                12%
+                <span id="statPlatesTrendValue">0%</span>
               </span>
             </div>
           </div>
           <div class="stat-card">
             <p class="stat-label">Illegal Plates Found</p>
             <div class="stat-row">
-              <span class="stat-value">28</span>
-              <span class="stat-trend up">
+              <span class="stat-value" id="statIllegalPlates">0</span>
+              <span class="stat-trend" id="statIllegalTrend" style="display:none;">
                 <span class="material-symbols-outlined">trending_up</span>
-                2%
+                <span id="statIllegalTrendValue">0%</span>
               </span>
             </div>
           </div>
@@ -47,10 +58,10 @@
           <div class="stat-card">
             <p class="stat-label">Detection Accuracy</p>
             <div class="stat-row">
-              <span class="stat-value">98.4%</span>
-              <span class="stat-trend up">
+              <span class="stat-value" id="statAccuracy">0%</span>
+              <span class="stat-trend" id="statAccuracyTrend" style="display:none;">
                 <span class="material-symbols-outlined">trending_up</span>
-                0.5%
+                <span id="statAccuracyTrendValue">0%</span>
               </span>
             </div>
           </div>
@@ -84,9 +95,11 @@
         <!-- Video Preview (visible after upload) -->
         <div class="video-preview-section" id="videoPreview" style="display:none;">
           <div class="frame-viewer" style="margin-bottom:16px;" data-glare="false">
-            <video id="videoPlayer" controls style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+            <video id="videoPlayer" controls
+              style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
             <!-- Bounding box overlay for violations -->
-            <div class="bbox suspicious" id="violationBbox" style="display:none; top:35%; left:40%; width:20%; height:12%;">
+            <div class="bbox suspicious" id="violationBbox"
+              style="display:none; top:35%; left:40%; width:20%; height:12%;">
               <div class="bbox-label">
                 <span class="material-symbols-outlined" style="font-size:10px">warning</span>
                 Illegal Plate
@@ -134,7 +147,8 @@
           <div class="processing-spinner"></div>
           <div>
             <p style="font-weight:600; font-size:15px;">Analyzing video frames...</p>
-            <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">Running detection pipeline: Vehicle → Plate → CRNN → Pattern Analysis</p>
+            <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">Running detection pipeline: Vehicle →
+              Plate → CRNN → Pattern Analysis</p>
           </div>
         </div>
 
@@ -172,6 +186,99 @@
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
   <script>
+    // ============ Statistics Management ============
+    const STATS_KEY = 'roadvision_stats';
+
+    // Initialize or load statistics from localStorage
+    function loadStats() {
+      const saved = localStorage.getItem(STATS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+      return {
+        totalPlatesScanned: 0,
+        totalIllegalPlates: 0,
+        totalDetections: 0,
+        averageConfidence: 0,
+        uniquePlates: new Set()
+      };
+    }
+
+    function saveStats(stats) {
+      // Convert Set to Array for JSON serialization
+      const toSave = {
+        ...stats,
+        uniquePlates: Array.from(stats.uniquePlates)
+      };
+      localStorage.setItem(STATS_KEY, JSON.stringify(toSave));
+    }
+
+    function updateStatsDisplay(stats) {
+      // Update Plates Scanned (unique plates only)
+      document.getElementById('statPlatesScanned').textContent = stats.totalPlatesScanned.toLocaleString();
+
+      // Update Illegal Plates Found
+      document.getElementById('statIllegalPlates').textContent = stats.totalIllegalPlates.toLocaleString();
+
+      // Calculate and update Detection Accuracy
+      const accuracy = stats.totalDetections > 0
+        ? ((stats.averageConfidence / stats.totalDetections) * 100).toFixed(1)
+        : 0;
+      document.getElementById('statAccuracy').textContent = accuracy + '%';
+    }
+
+    function updateStatsFromDetections(detections) {
+      let stats = loadStats();
+
+      // Convert uniquePlates array back to Set if needed
+      if (Array.isArray(stats.uniquePlates)) {
+        stats.uniquePlates = new Set(stats.uniquePlates);
+      }
+
+      let newPlatesCount = 0;
+      let newIllegalCount = 0;
+      let totalConfidence = stats.averageConfidence * stats.totalDetections;
+
+      detections.forEach(detection => {
+        const plateId = detection.detected_plate;
+
+        // Only count unique plates (no duplicates)
+        if (!stats.uniquePlates.has(plateId)) {
+          stats.uniquePlates.add(plateId);
+          newPlatesCount++;
+
+          // Count illegal plates
+          if (detection.violation) {
+            newIllegalCount++;
+          }
+
+          // Add to confidence calculation
+          totalConfidence += (detection.confidence || 0);
+          stats.totalDetections++;
+        }
+      });
+
+      // Update totals
+      stats.totalPlatesScanned += newPlatesCount;
+      stats.totalIllegalPlates += newIllegalCount;
+      stats.averageConfidence = stats.totalDetections > 0 ? totalConfidence : 0;
+
+      // Save and display
+      saveStats(stats);
+      updateStatsDisplay(stats);
+
+      return stats;
+    }
+
+    // Load and display stats on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const stats = loadStats();
+      if (Array.isArray(stats.uniquePlates)) {
+        stats.uniquePlates = new Set(stats.uniquePlates);
+      }
+      updateStatsDisplay(stats);
+    });
+
     // ============ Video Upload Logic ============
     const uploadZone = document.getElementById('uploadZone');
     const videoInput = document.getElementById('videoInput');
@@ -377,6 +484,9 @@
     }
 
     function displayResults(results) {
+      // Update statistics with new detections (avoiding duplicates)
+      updateStatsFromDetections(results);
+
       detectionResults.style.display = 'block';
       resultsCount.className = 'badge alert';
       resultsCount.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px">warning</span> ${results.length} Violation${results.length !== 1 ? 's' : ''}`;
@@ -425,7 +535,7 @@
               <span class="detection-value" style="color:${confColor}; font-weight:600;">${conf}%</span>
             </div>
             ${r.frame ? `<div class="detection-row"><span class="detection-label">Frame</span><span class="detection-value">#${r.frame}</span></div>` : ''}
-            ${imgSrc ? `<button class="btn-evidence" onclick="openEvidenceModal('${imgSrc.replace(/'/g, "\\'") }', '${r.detected_plate}', '${r.correct_plate}', '${r.violation}', ${conf})"><span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence</button>` : ''}
+            ${imgSrc ? `<button class="btn-evidence" onclick="openEvidenceModal('${imgSrc.replace(/'/g, "\\'")}', '${r.detected_plate}', '${r.correct_plate}', '${r.violation}', ${conf})"><span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence</button>` : ''}
           </div>
         `;
         resultsGrid.appendChild(card);
@@ -564,4 +674,5 @@
   </script>
 
 </body>
+
 </html>

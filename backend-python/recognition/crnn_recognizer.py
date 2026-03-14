@@ -209,9 +209,9 @@ def _ctc_decode(output: "torch.Tensor") -> Tuple[str, float]:
     confidences = []
     prev_idx = -1
 
-    for t in range(indices.size(0)):
-        idx = indices[t].item()
-        prob = max_probs[t].item()
+    for t in range(int(indices.size(0))):
+        idx = int(indices[t].item())
+        prob = float(max_probs[t].item())
 
         # Skip blanks and repeated characters
         if idx != BLANK_IDX and idx != prev_idx:
@@ -222,7 +222,9 @@ def _ctc_decode(output: "torch.Tensor") -> Tuple[str, float]:
         prev_idx = idx
 
     text = ''.join(chars)
-    avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+    avg_conf = 0.0
+    if confidences:
+        avg_conf = float(sum(confidences) / len(confidences))
 
     return text, avg_conf
 
@@ -245,8 +247,6 @@ def preprocess_for_crnn(plate_image: np.ndarray) -> Optional["torch.Tensor"]:
     """
     if not _torch_available:
         return None
-
-    import cv2
 
     if plate_image is None or plate_image.size == 0:
         return None
@@ -301,7 +301,8 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
         if tensor is not None:
             try:
                 with torch.no_grad():
-                    output = model(tensor)  # (1, seq_len, num_classes)
+                    # Call forward explicitly to help linter
+                    output = model.forward(tensor)  # (1, seq_len, num_classes)
                     text, confidence = _ctc_decode(output[0])
                     if text and confidence >= 0.5:
                         logger.info(f"CRNN SUCCESS: '{text}' (conf: {confidence:.2f})")
@@ -311,12 +312,12 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
 
     # 2. Try PaddleOCR (fallback 1) - Strongest for Indian plates
     text, confidence = _paddleocr_recognize(plate_image)
-    if text and confidence >= 0.5:
+    if text and confidence >= 0.3:
         return text, confidence
 
     # 3. Try EasyOCR (fallback 2)
     text, confidence = _easyocr_recognize(plate_image)
-    if text and confidence >= 0.4:
+    if text and confidence >= 0.3:
         return text, confidence
 
     # 4. Try Tesseract (final fallback)
@@ -438,7 +439,9 @@ def _easyocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
             return _tesseract_recognize(plate_image)
         
         combined_text = ''.join(texts).upper()
-        avg_conf = sum(confidences) / len(confidences)
+        avg_conf = 0.0
+        if confidences:
+            avg_conf = float(sum(confidences) / len(confidences))
         
         logger.info(f"EasyOCR SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
         return combined_text, avg_conf
@@ -495,7 +498,9 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
             return _easyocr_recognize(plate_image)
 
         combined_text = ''.join(texts).strip().upper()
-        avg_conf = sum(confidences) / len(confidences)
+        avg_conf = 0.0
+        if confidences:
+            avg_conf = float(sum(confidences) / len(confidences))
         logger.info(f"PaddleOCR SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
         return combined_text, avg_conf
 

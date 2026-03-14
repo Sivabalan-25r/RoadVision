@@ -24,8 +24,33 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from processing.video_processor import process_video, save_upload_to_temp
-from recognition.plate_reader import read_plate, get_read_confidence, load_plate_model
+from recognition.plate_reader import read_plate, get_read_confidence, load_plate_model, detect_plates
 from rules.plate_rules import validate_plate, normalize_plate
+
+# ---- Helper Functions ----
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    Calculate Levenshtein distance between two strings.
+    Used for fuzzy matching of similar plate numbers.
+    """
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # Cost of insertions, deletions, or substitutions
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
 
 # ---- Logging ----
 logging.basicConfig(
@@ -334,7 +359,6 @@ async def process_camera_frame(file: UploadFile = File(...)):
         logger.info(f"Frame dimensions: {frame_width}x{frame_height}")
         
         # Run YOLO detection
-        from recognition.plate_reader import detect_plates
         detections = detect_plates(frame, frame_number=0)
         logger.info(f"YOLO detected {len(detections)} plates")
         
@@ -350,12 +374,10 @@ async def process_camera_frame(file: UploadFile = File(...)):
             h_pct = (bbox[3] / frame_height) * 100
             
             # Try to read the plate text
-            from recognition.plate_reader import read_plate
             plate_text = read_plate(det['raw_crop'], det['crop'])
             
             if plate_text:
                 # Validate the plate
-                from rules.plate_rules import validate_plate
                 validation = validate_plate(plate_text)
                 
                 logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
