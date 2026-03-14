@@ -24,22 +24,22 @@ PLATE_MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
 )
 
-DETECTION_CONF = 0.45  # YOLO detection confidence threshold (higher = fewer false positives)
-DETECTION_IMGSZ = 320  # Input size (320 = ~3x faster than 640, max speed mode)
+DETECTION_CONF = 0.35  # YOLO confidence — balanced: catches real plates, post-OCR rejects junk
+DETECTION_IMGSZ = 640  # Larger input = better detection accuracy for distant plates
 USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
 
 # ---- Geometric Filter Thresholds (tuned for Indian plates) ----
-# Indian number plates are ALWAYS wider than tall.
-# Shop boards / signage tend to be more square — excluded by aspect ratio.
-MIN_ASPECT_RATIO = 2.5   # w/h minimum — real plates are at least 2.5:1 wide
+# Indian number plates are wider than tall, but allow some tolerance for
+# tilted / partially visible plates. Shop signs are rejected by OCR validation.
+MIN_ASPECT_RATIO = 2.0   # w/h minimum — real plates are ≥2:1 wide
 MAX_ASPECT_RATIO = 7.0   # w/h maximum (very wide plates)
-MIN_PLATE_WIDTH = 80     # Minimum crop width in pixels (shop text tends to be smaller)
-MIN_PLATE_HEIGHT = 18    # Minimum crop height in pixels
-MIN_PLATE_AREA = 1500    # Minimum area in pixels (was 750 — reject tiny background text)
-MAX_PLATE_AREA_RATIO = 0.12  # Max fraction of frame area (rejects windshield detections)
+MIN_PLATE_WIDTH = 60     # Minimum crop width in pixels
+MIN_PLATE_HEIGHT = 16    # Minimum crop height in pixels
+MIN_PLATE_AREA = 900     # Minimum area in pixels
+MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.40  # Minimum OCR confidence (was 0.25, raised to reduce noise)
+OCR_MIN_CONFIDENCE = 0.30  # Minimum OCR confidence to accept
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
@@ -366,10 +366,6 @@ def detect_plates(
     # Get class name mapping from model
     class_names = model.names if hasattr(model, 'names') else {}
 
-    # Create debug directory
-    import os
-    debug_dir = os.path.join(os.path.dirname(__file__), '..', 'debug_plates')
-    os.makedirs(debug_dir, exist_ok=True)
 
     detection_idx = 0
     for result in results:
@@ -422,17 +418,8 @@ def detect_plates(
             # Update coordinates with refined bbox
             x1, y1, x2, y2 = refined_bbox
 
-            # Save debug image
-            debug_path = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_raw.png')
-            cv2.imwrite(debug_path, refined_crop)
-            logger.info(f"Saved debug plate: {debug_path} (size: {refined_crop.shape})")
-
             # Preprocess for recognition (upscale → CLAHE → blur → OTSU → 320×120)
             processed = preprocess_plate_crop(refined_crop)
-
-            # Save preprocessed debug image
-            debug_path_proc = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_processed.png')
-            cv2.imwrite(debug_path_proc, processed)
 
             w = x2 - x1
             h = y2 - y1
