@@ -452,6 +452,7 @@
               <span class="detection-value" style="color:${confColor}; font-weight:600;">${conf}%</span>
             </div>
             ${r.frame ? `<div class="detection-row"><span class="detection-label">Frame</span><span class="detection-value">#${r.frame}</span></div>` : ''}
+            ${r.frames_seen ? `<div class="detection-row"><span class="detection-label">Stability</span><span class="detection-value" style="color:var(--success); font-weight:600;">${r.frames_seen} frames</span></div>` : ''}
             ${imgSrc ? `<button class="btn-evidence" onclick="openEvidenceModal('${imgSrc.replace(/'/g, "\\'")}', '${r.detected_plate}', '${correctedDisplay}', '${r.violation || 'None'}', ${conf})"><span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence</button>` : ''}
           </div>
         `;

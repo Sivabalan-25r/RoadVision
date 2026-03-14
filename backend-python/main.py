@@ -201,9 +201,9 @@ async def analyze_video(video: UploadFile = File(...)):
         temp_path = save_upload_to_temp(file_bytes, suffix=ext)
         logger.info(f"Saved to temp: {temp_path} ({len(file_bytes)} bytes)")
 
-        # Step 1: Process video frames — every 5th frame
+        # Step 1: Process video frames — every 3rd frame (more sampling = better stabilization)
         logger.info("Starting YOLO + PaddleOCR pipeline...")
-        raw_detections = process_video(temp_path, frame_interval=5)
+        raw_detections = process_video(temp_path, frame_interval=3)
         logger.info(f"Raw plate detections from YOLO: {len(raw_detections)}")
 
         if not raw_detections:
@@ -295,20 +295,29 @@ async def analyze_video(video: UploadFile = File(...)):
                 plate_detections[normalized] = []
             plate_detections[normalized].append(detection_entry)
 
-        # Step 3: Frame-level aggregation with fuzzy matching
-        # Group similar plates together using Levenshtein distance
+        # Step 3: Stabilization + Frame-level aggregation with fuzzy matching
+        # Only keep plates seen in ≥2 frames (stabilization from Deep Dive doc)
+        # Then group similar plates using Levenshtein distance
+        MIN_FRAMES_REQUIRED = 2  # Plate must appear in at least 2 frames to be real
         detections: List[dict] = []
         processed_plates = set()
         
         for normalized_plate, detection_list in plate_detections.items():
+            # ── Stabilization: reject plates seen in only 1 frame ──
+            if len(detection_list) < MIN_FRAMES_REQUIRED:
+                logger.debug(
+                    f"Stabilization: skipping '{normalized_plate}' — only seen in "
+                    f"{len(detection_list)} frame(s), need {MIN_FRAMES_REQUIRED}+"
+                )
+                continue
+
             # Check if this plate is similar to any already processed plate
             is_duplicate = False
             for processed in processed_plates:
                 # Calculate Levenshtein distance
                 distance = _levenshtein_distance(normalized_plate, processed)
-                # If plates are similar (≤3 char difference), consider it a duplicate
-                # This catches OCR variants like TN57ADJ80 vs TN57AD3604
-                if distance <= 3 and abs(len(normalized_plate) - len(processed)) <= 3:
+                # Tighter distance (≤2) to avoid false merges
+                if distance <= 2 and abs(len(normalized_plate) - len(processed)) <= 2:
                     logger.debug(f"Skipping duplicate: '{normalized_plate}' ≈ '{processed}' (distance: {distance})")
                     is_duplicate = True
                     break
@@ -316,17 +325,25 @@ async def analyze_video(video: UploadFile = File(...)):
             if not is_duplicate:
                 # Select the detection with highest confidence
                 best_detection = max(detection_list, key=lambda d: d['confidence'])
+                
+                # ── Confidence boost for multi-frame stability ──
+                # More frames seen = more confident the plate is real
+                frames_seen = len(detection_list)
+                stability_boost = min(1.0, best_detection['confidence'] + (frames_seen - 1) * 0.05)
+                best_detection['confidence'] = round(stability_boost, 2)
+                best_detection['frames_seen'] = frames_seen  # Include for frontend display
+                
                 detections.append(best_detection)
                 processed_plates.add(normalized_plate)
 
-                # Save the final deduplicated detection to DB
+                # Save the final stabilized + deduplicated detection to DB
                 try:
                     db.add_detection('CAM-001', best_detection)
                 except Exception as db_err:
-                    logger.warning(f"DB save failed for deduplicated video detection: {db_err}")
+                    logger.warning(f"DB save failed for stabilized video detection: {db_err}")
                 
                 logger.debug(
-                    f"Plate '{normalized_plate}': aggregated {len(detection_list)} detections, "
+                    f"Plate '{normalized_plate}': seen in {frames_seen} frames, "
                     f"selected frame {best_detection['frame']} with confidence {best_detection['confidence']}"
                 )
 
@@ -335,7 +352,7 @@ async def analyze_video(video: UploadFile = File(...)):
 
         logger.info(
             f"Final results: {len(detections)} unique detections "
-            f"(after fuzzy deduplication), "
+            f"(after stabilization + fuzzy dedup), "
             f"{sum(1 for d in detections if d['violation'])} violations"
         )
 
