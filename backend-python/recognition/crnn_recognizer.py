@@ -1,9 +1,15 @@
 """
-RoadVision — CRNN License Plate Recognizer
-CNN feature extractor → BiLSTM sequence modeler → CTC-decoded output.
+RoadVision — License Plate OCR Recognizer
+Optimized multi-engine OCR with intelligent fallback for Indian plates.
+
+OCR Engine Priority (for Indian plates):
+  1. PaddleOCR (threshold: 0.5) - Best accuracy for Indian plates
+  2. EasyOCR (threshold: 0.4) - Good secondary deep learning option
+  3. Tesseract (threshold: 0.3) - Final fallback for simple text
+  4. CRNN (if available) - Custom training fallback
 
 Character set: 0-9 A-Z (36 characters + CTC blank).
-Input: preprocessed grayscale plate crop (resized to 100×32).
+Input: preprocessed grayscale plate crop (resized to 100×32 for CRNN).
 Output: (text, confidence) tuple.
 """
 
@@ -277,11 +283,14 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
     """
     Recognize text from a plate crop image using the optimal fallback chain.
 
-    Fallback Chain:
-      1. CRNN (if weights available) - Best for speed/custom training
-      2. PaddleOCR - Best for general accuracy on Indian plates
-      3. EasyOCR - Good secondary deep learning option
-      4. Tesseract - Final fallback for simple text
+    Optimized Fallback Chain (EasyOCR Primary):
+      1. EasyOCR (threshold: 0.25) - Primary engine for license plates
+      2. PaddleOCR (threshold: 0.30) - Secondary deep learning option
+      3. Tesseract (threshold: 0.25) - Final fallback for simple text
+      4. CRNN (if weights available) - Custom training fallback
+
+    Engine-specific confidence thresholds ensure optimal accuracy while
+    maintaining intelligent fallback behavior.
 
     Args:
         plate_image: BGR plate crop (best for DL models like Paddle/EasyOCR).
@@ -294,7 +303,27 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
     if plate_image is None or plate_image.size == 0:
         return "", 0.0
 
-    # 1. Try Custom CRNN if available
+    # 1. Try EasyOCR first - Best for license plates (threshold: 0.25)
+    text, confidence = _easyocr_recognize(plate_image)
+    if text and confidence >= 0.25:
+        logger.info(f"✓ Final result from EasyOCR: '{text}' (conf: {confidence:.2f})")
+        return text, confidence
+
+    # 2. Try PaddleOCR (threshold: 0.30)
+    text, confidence = _paddleocr_recognize(plate_image)
+    if text and confidence >= 0.30:
+        logger.info(f"✓ Final result from PaddleOCR: '{text}' (conf: {confidence:.2f})")
+        return text, confidence
+
+    # 3. Try Tesseract (threshold: 0.25)
+    # Use preprocessed (binary) image for Tesseract if provided
+    tess_input = preprocessed_image if preprocessed_image is not None else plate_image
+    text, confidence = _tesseract_recognize(tess_input)
+    if text and confidence >= 0.25:
+        logger.info(f"✓ Final result from Tesseract: '{text}' (conf: {confidence:.2f})")
+        return text, confidence
+
+    # 4. Try Custom CRNN as final fallback (if weights available)
     model = _load_model()
     if model is not None:
         tensor = preprocess_for_crnn(plate_image)
@@ -303,26 +332,15 @@ def recognize_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = No
                 with torch.no_grad():
                     output = model(tensor)  # (1, seq_len, num_classes)
                     text, confidence = _ctc_decode(output[0])
-                    if text and confidence >= 0.5:
-                        logger.info(f"CRNN SUCCESS: '{text}' (conf: {confidence:.2f})")
+                    if text:
+                        logger.info(f"✓ Final result from CRNN: '{text}' (conf: {confidence:.2f})")
                         return text, confidence
             except Exception as e:
                 logger.error(f"CRNN recognition error: {e}")
 
-    # 2. Try PaddleOCR (fallback 1) - Strongest for Indian plates
-    text, confidence = _paddleocr_recognize(plate_image)
-    if text and confidence >= 0.5:
-        return text, confidence
-
-    # 3. Try EasyOCR (fallback 2)
-    text, confidence = _easyocr_recognize(plate_image)
-    if text and confidence >= 0.4:
-        return text, confidence
-
-    # 4. Try Tesseract (final fallback)
-    # Use preprocessed (binary) image for Tesseract if provided
-    tess_input = preprocessed_image if preprocessed_image is not None else plate_image
-    return _tesseract_recognize(tess_input)
+    # All engines failed
+    logger.warning("All OCR engines failed to recognize plate text")
+    return "", 0.0
 
 
 # ---- PaddleOCR Fallback (replaces EasyOCR for better Indian plate accuracy) ----
@@ -389,63 +407,75 @@ def _easyocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
     """
     reader = _get_easyocr_reader()
     if reader is None:
-        return _tesseract_recognize(plate_image)
+        return "", 0.0
 
     try:
-        # Preprocess specifically for EasyOCR
-        # EasyOCR works better with larger, contrast-enhanced images
+        logger.debug("Attempting EasyOCR recognition...")
+        # Enhanced preprocessing specifically for EasyOCR
         if len(plate_image.shape) == 3:
             gray = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
         else:
             gray = plate_image.copy()
         
-        # Upscale significantly if image is small
+        # Aggressive upscaling for better character recognition
         h, w = gray.shape
-        if w < 200 or h < 60:
-            scale = max(200 / w, 60 / h)
+        target_height = 120
+        if h < target_height:
+            scale = target_height / h
             gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            h, w = gray.shape
         
-        # Apply CLAHE for better contrast
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        # Advanced denoising
+        gray = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+        
+        # Strong CLAHE for contrast
+        clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8))
         enhanced = clahe.apply(gray)
         
-        # Convert back to BGR for EasyOCR
-        bgr = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+        # Sharpening to enhance edges
+        kernel_sharpen = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
         
-        # Try with lower confidence threshold and more permissive settings
+        # Convert back to BGR for EasyOCR
+        bgr = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+        
+        # Try with very permissive settings
         results = reader.readtext(
             bgr,
             detail=1,
             paragraph=False,
             allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-            batch_size=1
+            batch_size=1,
+            width_ths=0.5,  # More permissive word grouping
+            height_ths=0.5,
+            decoder='greedy'  # Faster, often better for plates
         )
         
         if not results:
-            logger.debug("EasyOCR: No text detected, trying Tesseract")
-            return _tesseract_recognize(plate_image)
+            logger.debug("EasyOCR: No text detected")
+            return "", 0.0
         
         # Combine all detected text
         texts = []
         confidences = []
         for (bbox, text, conf) in results:
-            if conf >= 0.2:  # Very low threshold to catch more text
+            if conf >= 0.15:  # Very low threshold to catch more text
                 texts.append(text.strip())
                 confidences.append(conf)
         
         if not texts:
-            logger.debug("EasyOCR: No text with sufficient confidence, trying Tesseract")
-            return _tesseract_recognize(plate_image)
+            logger.debug("EasyOCR: No text with sufficient confidence (threshold: 0.15)")
+            return "", 0.0
         
         combined_text = ''.join(texts).upper()
         avg_conf = sum(confidences) / len(confidences)
         
-        logger.info(f"EasyOCR SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
+        logger.debug(f"EasyOCR detected: '{combined_text}' (conf: {avg_conf:.2f})")
         return combined_text, avg_conf
         
     except Exception as e:
-        logger.warning(f"EasyOCR failed: {e}, falling back to Tesseract")
-        return _tesseract_recognize(plate_image)
+        logger.warning(f"EasyOCR failed: {e}")
+        return "", 0.0
 
 
 def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
@@ -461,12 +491,37 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         return _tesseract_recognize(plate_image)
 
     try:
+        logger.debug("Attempting PaddleOCR recognition...")
+        
+        # Enhanced preprocessing for PaddleOCR
+        if len(plate_image.shape) == 3:
+            gray = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = plate_image.copy()
+        
+        # Upscale significantly for better OCR
+        h, w = gray.shape
+        if w < 300 or h < 80:
+            scale = max(300 / w, 80 / h)
+            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        
+        # Apply strong CLAHE
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        
+        # Sharpen
+        kernel_sharpen = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
+        
+        # Convert back to BGR for PaddleOCR
+        bgr = cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR)
+        
         # PaddleOCR 3.4+ uses PaddleX format - call without cls parameter
-        results = reader.ocr(plate_image)
+        results = reader.ocr(bgr)
 
         if not results or not results[0]:
-            logger.debug("PaddleOCR returned empty results, trying EasyOCR")
-            return _easyocr_recognize(plate_image)
+            logger.debug("PaddleOCR returned empty results")
+            return "", 0.0
 
         texts = []
         confidences = []
@@ -477,7 +532,7 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
             rec_texts = results[0].get('rec_texts', [])
             rec_scores = results[0].get('rec_scores', [])
             for text, conf in zip(rec_texts, rec_scores):
-                if conf >= 0.5:
+                if conf >= 0.3:  # Lowered threshold
                     texts.append(str(text))
                     confidences.append(float(conf))
         elif isinstance(results[0], list):
@@ -486,22 +541,22 @@ def _paddleocr_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
                 if line and len(line) >= 2:
                     if isinstance(line[1], (tuple, list)) and len(line[1]) >= 2:
                         text, conf = line[1][0], line[1][1]
-                        if conf >= 0.5:
+                        if conf >= 0.3:  # Lowered threshold
                             texts.append(str(text))
                             confidences.append(float(conf))
 
         if not texts:
-            logger.debug("PaddleOCR: No text with sufficient confidence, trying EasyOCR")
-            return _easyocr_recognize(plate_image)
+            logger.debug("PaddleOCR: No text with sufficient confidence (threshold: 0.3)")
+            return "", 0.0
 
         combined_text = ''.join(texts).strip().upper()
         avg_conf = sum(confidences) / len(confidences)
-        logger.info(f"PaddleOCR SUCCESS: '{combined_text}' (conf: {avg_conf:.2f})")
+        logger.debug(f"PaddleOCR detected: '{combined_text}' (conf: {avg_conf:.2f})")
         return combined_text, avg_conf
 
     except Exception as e:
-        logger.warning(f"PaddleOCR failed: {e}, falling back to EasyOCR")
-        return _easyocr_recognize(plate_image)
+        logger.warning(f"PaddleOCR failed: {e}")
+        return "", 0.0
 
 
 def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
@@ -514,6 +569,8 @@ def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
     try:
         import pytesseract
         from PIL import Image
+        
+        logger.debug("Attempting Tesseract recognition...")
         
         # Robust Tesseract path resolution for Windows
         possible_paths = [
@@ -531,7 +588,6 @@ def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
         
         if tess_path:
             pytesseract.pytesseract.tesseract_cmd = tess_path
-            logger.info(f"Using Tesseract at: {tess_path}")
         else:
             # Check if tesseract is in PATH
             import shutil
@@ -601,7 +657,7 @@ def _tesseract_recognize(plate_image: np.ndarray) -> Tuple[str, float]:
             logger.debug("Tesseract: No text detected")
             return "", 0.0
         
-        logger.info(f"Tesseract SUCCESS: '{best_text}' (conf: {best_conf:.2f})")
+        logger.debug(f"Tesseract detected: '{best_text}' (conf: {best_conf:.2f})")
         return best_text, best_conf
         
     except ImportError:

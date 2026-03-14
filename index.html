@@ -21,25 +21,23 @@
 
       <!-- Main Content -->
       <div class="main-content">
-        <!-- Stat Cards -->
+        <!-- Stat Cards - Real Data Only -->
         <div class="stats-grid">
           <div class="stat-card">
             <p class="stat-label">Plates Scanned</p>
             <div class="stat-row">
-              <span class="stat-value">14,284</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">trending_up</span>
-                12%
+              <span class="stat-value" id="totalPlatesScanned">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Total detected
               </span>
             </div>
           </div>
           <div class="stat-card">
             <p class="stat-label">Illegal Plates Found</p>
             <div class="stat-row">
-              <span class="stat-value">28</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">trending_up</span>
-                2%
+              <span class="stat-value" id="illegalPlatesFound">0</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Violations
               </span>
             </div>
           </div>
@@ -47,10 +45,9 @@
           <div class="stat-card">
             <p class="stat-label">Detection Accuracy</p>
             <div class="stat-row">
-              <span class="stat-value">98.4%</span>
-              <span class="stat-trend up">
-                <span class="material-symbols-outlined">trending_up</span>
-                0.5%
+              <span class="stat-value" id="detectionAccuracy">--</span>
+              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+                Confidence avg
               </span>
             </div>
           </div>
@@ -171,7 +168,23 @@
   <script src="components/loader.js"></script>
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
+  <script src="api-client.js"></script>
   <script>
+    // ============ Update Stats with Real Data ============
+    async function updateDashboardStats() {
+      try {
+        const stats = await RoadVisionAPI.Detection.getStats();
+        document.getElementById('totalPlatesScanned').textContent = stats.total_detections;
+        document.getElementById('illegalPlatesFound').textContent = stats.violations;
+        document.getElementById('detectionAccuracy').textContent = stats.avg_confidence + '%';
+      } catch (e) {
+        console.error('Error loading stats:', e);
+      }
+    }
+    
+    // Update stats on page load
+    window.addEventListener('load', updateDashboardStats);
+    
     // ============ Video Upload Logic ============
     const uploadZone = document.getElementById('uploadZone');
     const videoInput = document.getElementById('videoInput');
@@ -313,9 +326,14 @@
           return;
         }
 
-        // Save detections to localStorage for detections page
-        localStorage.setItem('roadvision_detections', JSON.stringify(data.detections));
-        console.log(`Saved ${data.detections.length} detections to localStorage`);
+        // Save detections to database
+        for (const detection of data.detections) {
+          await RoadVisionAPI.Detection.add(detection);
+        }
+        console.log(`Saved ${data.detections.length} detections to database`);
+        
+        // Update dashboard stats
+        await updateDashboardStats();
 
         displayResults(data.detections);
 

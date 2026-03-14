@@ -60,6 +60,7 @@
                   <th>Detected Registration</th>
                   <th>Correct Registration</th>
                   <th>Violation</th>
+                  <th>Vehicle Status</th>
                   <th>Confidence</th>
                   <th>Frame</th>
                   <th style="text-align:right">Actions</th>
@@ -97,6 +98,7 @@
   <script src="components/evidence-store.js"></script>
   <script src="components/glare-hover.js"></script>
   <script src="components/pagination.js"></script>
+  <script src="api-client.js"></script>
   <script>
     // ============ Load Real History ============
     const historyTableBody = document.getElementById('historyTableBody');
@@ -105,17 +107,10 @@
     const emptyState = document.getElementById('emptyState');
     const historyNumber = document.getElementById('historyNumber');
 
-    function loadHistory() {
-      const detectionsData = localStorage.getItem('roadvision_detections');
-      
-      if (!detectionsData) {
-        loadingState.style.display = 'none';
-        emptyState.style.display = 'block';
-        return;
-      }
-
+    async function loadHistory() {
       try {
-        const detections = JSON.parse(detectionsData);
+        // Get all detections from database
+        const detections = await RoadVisionAPI.Detection.getAll(false, 100);
         
         if (detections.length === 0) {
           loadingState.style.display = 'none';
@@ -133,16 +128,30 @@
             (det.violation.includes('Tampered') ? 'alert' : 
              det.violation.includes('Spacing') ? 'warning' : 'alert') : 'success';
           const violationText = det.violation || 'None (Legal)';
+          
+          // Vehicle registration status
+          let vehicleStatus = 'Unknown';
+          let vehicleBadgeClass = 'secondary';
+          if (det.vehicle_info) {
+            if (det.vehicle_info.registered) {
+              vehicleStatus = `Registered (${det.vehicle_info.vehicle_type || 'N/A'})`;
+              vehicleBadgeClass = 'success';
+            } else {
+              vehicleStatus = 'Unregistered';
+              vehicleBadgeClass = 'alert';
+            }
+          }
 
           return `
             <tr>
               <td><span class="plate-number">${det.detected_plate}</span></td>
               <td style="color:var(--text-secondary)">${det.correct_plate}</td>
               <td><span class="badge ${badgeClass}">${violationText}</span></td>
+              <td><span class="badge ${vehicleBadgeClass}">${vehicleStatus}</span></td>
               <td style="color:var(--success); font-weight:600;">${confidence}%</td>
               <td style="color:var(--text-muted);">Frame ${det.frame}</td>
               <td style="text-align:right">
-                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate}', '${violationText}', ${confidence})">
+                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate}', '${violationText}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
                   <span class="material-symbols-outlined">visibility</span>
                 </button>
               </td>
@@ -174,9 +183,14 @@
       if (e.target === evidenceModal) evidenceModal.classList.remove('active');
     });
 
-    function viewDetails(plate, corrected, violation, confidence) {
-      const evidence = getEvidenceByPlate(plate);
-      const imgSrc = evidence ? evidence.image : '';
+    function viewDetails(plate, corrected, violation, confidence, vehicleInfo, plateImage) {
+      // Use plate_image from database if available, otherwise try evidence store
+      let imgSrc = plateImage || '';
+      
+      if (!imgSrc) {
+        const evidence = getEvidenceByPlate(plate);
+        imgSrc = evidence ? evidence.image : '';
+      }
 
       if (imgSrc) {
         evidenceModalImg.src = imgSrc;

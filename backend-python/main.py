@@ -14,18 +14,20 @@ API docs: http://localhost:8000/docs
 import logging
 import os
 import tempfile
-from typing import List
+from typing import List, Optional
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from processing.video_processor import process_video, save_upload_to_temp
 from recognition.plate_reader import read_plate, get_read_confidence, load_plate_model
 from rules.plate_rules import validate_plate, normalize_plate
+import database as db
 
 # ---- Logging ----
 logging.basicConfig(
@@ -64,6 +66,10 @@ async def health_check():
 @app.on_event("startup")
 async def startup_check():
     """Load the YOLO plate detector at startup and verify dependencies."""
+    # Initialize database
+    db.init_database()
+    logger.info("Database initialized")
+    
     models_dir = os.path.join(os.path.dirname(__file__), 'models')
     detector_path = os.path.join(models_dir, 'license_plate_detector.pt')
     crnn_path = os.path.join(models_dir, 'crnn.pth')
@@ -187,8 +193,8 @@ async def analyze_video(video: UploadFile = File(...)):
             return JSONResponse(content={"detections": []})
 
         # Step 2: Read plate text via OCR + validate format
-        detections: List[dict] = []
-        seen_plates = set()
+        # Use frame-level aggregation: group by normalized plate, select highest confidence
+        plate_detections = {}  # normalized_plate -> list of detection entries
 
         logger.info(f"Processing {len(raw_detections)} raw detections...")
 
@@ -204,12 +210,6 @@ async def analyze_video(video: UploadFile = File(...)):
                 logger.debug(f"Detection {idx}: Plate too short after normalization: '{normalized}'")
                 continue
 
-            # Deduplicate
-            if normalized in seen_plates:
-                logger.debug(f"Detection {idx}: Duplicate plate '{normalized}'")
-                continue
-            seen_plates.add(normalized)
-
             # Validate against Indian RTO rules
             validation = validate_plate(plate_text)
 
@@ -221,9 +221,26 @@ async def analyze_video(video: UploadFile = File(...)):
             # Calculate combined confidence (YOLO + OCR) - pass both images
             yolo_conf = det['confidence']
             ocr_conf = get_read_confidence(det['raw_crop'], det['crop'])
-            combined_conf = round(
-                (yolo_conf * 0.4 + ocr_conf * 0.6) * validation.confidence_modifier,
-                2,
+            
+            # Base combined confidence with weighted average (YOLO: 0.4, OCR: 0.6)
+            base_conf = (yolo_conf * 0.4 + ocr_conf * 0.6)
+            
+            # Apply confidence boost for plates matching Indian format
+            # Valid format plates (matching PLATE_PATTERN) get a boost to reach >= 0.50 threshold
+            # This applies even to unregistered vehicles, as long as the format is correct
+            format_boost = 1.0
+            from rules.plate_rules import PLATE_PATTERN
+            if PLATE_PATTERN.match(validation.correct_plate):
+                # Matches Indian RTO format - apply boost
+                format_boost = 1.15
+            
+            # Calculate combined confidence and cap at 1.0
+            combined_conf = min(
+                1.0,
+                round(
+                    base_conf * format_boost * validation.confidence_modifier,
+                    2,
+                )
             )
 
             detection_entry = {
@@ -234,15 +251,51 @@ async def analyze_video(video: UploadFile = File(...)):
                 "frame": det['frame_number'],
                 "bbox": det['bbox'],  # [x, y, width, height]
             }
+            
+            # Add vehicle registration info if available
+            if validation.vehicle_info:
+                detection_entry["vehicle_info"] = validation.vehicle_info
 
-            detections.append(detection_entry)
+            # Group by normalized plate text for aggregation
+            if normalized not in plate_detections:
+                plate_detections[normalized] = []
+            plate_detections[normalized].append(detection_entry)
+
+        # Step 3: Frame-level aggregation with fuzzy matching
+        # Group similar plates together using Levenshtein distance
+        detections: List[dict] = []
+        processed_plates = set()
+        
+        for normalized_plate, detection_list in plate_detections.items():
+            # Check if this plate is similar to any already processed plate
+            is_duplicate = False
+            for processed in processed_plates:
+                # Calculate Levenshtein distance
+                distance = self._levenshtein_distance(normalized_plate, processed)
+                # If plates are very similar (1 char difference), consider it a duplicate
+                if distance <= 1 and abs(len(normalized_plate) - len(processed)) <= 1:
+                    logger.debug(f"Skipping duplicate: '{normalized_plate}' ≈ '{processed}' (distance: {distance})")
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                # Select the detection with highest confidence
+                best_detection = max(detection_list, key=lambda d: d['confidence'])
+                detections.append(best_detection)
+                processed_plates.add(normalized_plate)
+                
+                logger.debug(
+                    f"Plate '{normalized_plate}': aggregated {len(detection_list)} detections, "
+                    f"selected frame {best_detection['frame']} with confidence {best_detection['confidence']}"
+                )
 
         # Sort by frame number
         detections.sort(key=lambda d: d.get('frame', 0))
 
         logger.info(
-            f"Final results: {len(detections)} detections "
-            f"({sum(1 for d in detections if d['violation'])} violations)"
+            f"Final results: {len(detections)} unique detections "
+            f"(after fuzzy deduplication), "
+            f"{sum(1 for d in detections if d['violation'])} violations"
         )
 
         return JSONResponse(content={"detections": detections})
@@ -303,14 +356,110 @@ async def get_live_detections():
     return JSONResponse(content={"detections": mock_detections})
 
 
+# ---- Camera Management Endpoints ----
+@app.get("/api/cameras")
+async def get_cameras():
+    """Get all cameras"""
+    cameras = db.get_all_cameras()
+    return JSONResponse(content={"cameras": cameras})
+
+
+@app.get("/api/cameras/{camera_id}")
+async def get_camera_info(camera_id: str):
+    """Get camera information"""
+    camera = db.get_camera(camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    return JSONResponse(content={"camera": camera})
+
+
+class CameraUpdate(BaseModel):
+    name: str
+    location: str
+    resolution: str = "1080p"
+    latitude: str = ""
+    longitude: str = ""
+    address: str = ""
+    accuracy: str = ""
+
+
+@app.put("/api/cameras/{camera_id}")
+async def update_camera_info(camera_id: str, data: CameraUpdate):
+    """Update camera information"""
+    camera = db.get_camera(camera_id)
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    db.update_camera(camera_id, data.dict())
+    return JSONResponse(content={"message": "Camera updated successfully"})
+
+
+# ---- Detection Endpoints ----
+@app.get("/api/detections/{camera_id}")
+async def get_camera_detections(camera_id: str, violations_only: bool = False, limit: int = 100):
+    """Get detections for a camera"""
+    detections = db.get_detections(camera_id, limit=limit, violations_only=violations_only)
+    return JSONResponse(content={"detections": detections})
+
+
+@app.get("/api/stats/{camera_id}")
+async def get_camera_stats(camera_id: str):
+    """Get detection statistics for a camera"""
+    stats = db.get_detection_stats(camera_id)
+    return JSONResponse(content={"stats": stats})
+
+
+class Detection(BaseModel):
+    detected_plate: str
+    correct_plate: str = ""
+    violation: Optional[str] = None
+    confidence: float
+    frame: int = 0
+    bbox: list = []
+    plate_image: str = ""
+    source: str = "live_monitoring"
+
+
+@app.post("/api/detections/{camera_id}")
+async def add_detection(camera_id: str, detection: Detection):
+    """Add a new detection"""
+    try:
+        camera = db.get_camera(camera_id)
+        if not camera:
+            raise HTTPException(status_code=404, detail="Camera not found")
+        
+        detection_id = db.add_detection(camera_id, detection.dict())
+        logger.info(f"Added detection {detection_id} for camera {camera_id}: {detection.detected_plate}")
+        return JSONResponse(content={"id": detection_id, "message": "Detection added successfully"})
+    except Exception as e:
+        logger.error(f"Error adding detection: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/detections/{camera_id}")
+async def clear_detections(camera_id: str):
+    """Clear all detections for a camera"""
+    db.clear_all_detections(camera_id)
+    return JSONResponse(content={"message": "All detections cleared"})
+
+
 # ---- Live Camera Stream Processing ----
 @app.post("/api/process-frame")
-async def process_camera_frame(file: UploadFile = File(...)):
+async def process_camera_frame(
+    file: UploadFile = File(...),
+    original_width: int = Form(0),
+    original_height: int = Form(0)
+):
     """
     Process a single camera frame and return YOLO detections with bounding boxes.
     
     This endpoint is designed for live camera feeds where frames are sent
     one at a time for real-time processing.
+    
+    Args:
+        file: The image frame to process
+        original_width: Original webcam width (before downscaling)
+        original_height: Original webcam height (before downscaling)
     
     Returns:
         JSON with detected plates and their bounding boxes (as percentages).
@@ -329,9 +478,21 @@ async def process_camera_frame(file: UploadFile = File(...)):
             logger.error("Failed to decode frame")
             raise HTTPException(status_code=400, detail="Invalid image")
         
-        # Get frame dimensions
+        # Get frame dimensions (processing resolution)
         frame_height, frame_width = frame.shape[:2]
-        logger.info(f"Frame dimensions: {frame_width}x{frame_height}")
+        logger.info(f"Processing dimensions: {frame_width}x{frame_height}")
+        
+        # Use original dimensions for percentage calculation if provided
+        # This ensures bboxes align correctly when displayed on original resolution canvas
+        display_width = original_width if original_width > 0 else frame_width
+        display_height = original_height if original_height > 0 else frame_height
+        
+        if original_width > 0 and original_height > 0:
+            logger.info(f"Display dimensions: {display_width}x{display_height}")
+            # Calculate scaling factors
+            scale_x = frame_width / display_width
+            scale_y = frame_height / display_height
+            logger.info(f"Scaling factors: x={scale_x:.3f}, y={scale_y:.3f}")
         
         # Run YOLO detection
         from recognition.plate_reader import detect_plates
@@ -341,13 +502,33 @@ async def process_camera_frame(file: UploadFile = File(...)):
         # Convert detections to percentage-based bounding boxes
         results = []
         for idx, det in enumerate(detections):
-            bbox = det['bbox']  # [x, y, w, h] in pixels
+            bbox = det['bbox']  # [x, y, w, h] in pixels (at processing resolution)
             
-            # Convert to percentages
-            x_pct = (bbox[0] / frame_width) * 100
-            y_pct = (bbox[1] / frame_height) * 100
-            w_pct = (bbox[2] / frame_width) * 100
-            h_pct = (bbox[3] / frame_height) * 100
+            # Scale bbox back to original display resolution if needed
+            if original_width > 0 and original_height > 0:
+                # Bbox is in processing resolution, scale to display resolution
+                display_x = bbox[0] / scale_x
+                display_y = bbox[1] / scale_y
+                display_w = bbox[2] / scale_x
+                display_h = bbox[3] / scale_y
+            else:
+                # No scaling needed
+                display_x = bbox[0]
+                display_y = bbox[1]
+                display_w = bbox[2]
+                display_h = bbox[3]
+            
+            # Convert to percentages based on display dimensions
+            x_pct = (display_x / display_width) * 100
+            y_pct = (display_y / display_height) * 100
+            w_pct = (display_w / display_width) * 100
+            h_pct = (display_h / display_height) * 100
+            
+            # Convert plate crop to base64 for frontend display
+            import base64
+            _, buffer = cv2.imencode('.jpg', det['raw_crop'])
+            plate_image_base64 = base64.b64encode(buffer).decode('utf-8')
+            plate_image_data_url = f"data:image/jpeg;base64,{plate_image_base64}"
             
             # Try to read the plate text
             from recognition.plate_reader import read_plate
@@ -360,7 +541,7 @@ async def process_camera_frame(file: UploadFile = File(...)):
                 
                 logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
                 
-                results.append({
+                result_entry = {
                     "detected_plate": validation.detected_plate,
                     "correct_plate": validation.correct_plate,
                     "violation": validation.violation,
@@ -370,8 +551,15 @@ async def process_camera_frame(file: UploadFile = File(...)):
                         round(y_pct, 1),
                         round(w_pct, 1),
                         round(h_pct, 1)
-                    ]
-                })
+                    ],
+                    "plate_image": plate_image_data_url
+                }
+                
+                # Add vehicle registration info if available
+                if validation.vehicle_info:
+                    result_entry["vehicle_info"] = validation.vehicle_info
+                
+                results.append(result_entry)
             else:
                 # No OCR text, just show the detection
                 logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")
@@ -385,7 +573,8 @@ async def process_camera_frame(file: UploadFile = File(...)):
                         round(y_pct, 1),
                         round(w_pct, 1),
                         round(h_pct, 1)
-                    ]
+                    ],
+                    "plate_image": plate_image_data_url
                 })
         
         logger.info(f"Returning {len(results)} results to frontend")
