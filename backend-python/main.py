@@ -485,6 +485,64 @@ async def clear_detections(camera_id: str):
     return JSONResponse(content={"message": "All detections cleared"})
 
 
+
+# ---- Stabilization Tracker (from RoadVision Deep Dive) ----
+# "Do not log a plate the first millisecond you see it. Wait for at least
+# 2-3 frames of consistent readings to ensure the OCR has settled."
+import time as _time
+
+_plate_tracker: dict = {}  # normalized_plate -> {count, best_conf, best_entry, last_seen, saved}
+STABILIZATION_FRAMES = 2   # Require N consistent frame readings before confirming
+TRACKER_EXPIRY_SEC = 30    # Expire stale tracker entries after 30s
+
+
+def _stabilize_detection(normalized_plate: str, result_entry: dict, camera_id: str) -> bool:
+    """
+    Track a plate across frames. Returns True when the plate is confirmed
+    (seen in ≥ STABILIZATION_FRAMES frames) and should be sent to client.
+    Saves to DB only on first confirmation.
+    """
+    global _plate_tracker
+    now = _time.time()
+
+    # Expire stale entries
+    stale = [k for k, v in _plate_tracker.items() if now - v['last_seen'] > TRACKER_EXPIRY_SEC]
+    for k in stale:
+        del _plate_tracker[k]
+
+    if normalized_plate in _plate_tracker:
+        entry = _plate_tracker[normalized_plate]
+        entry['count'] += 1
+        entry['last_seen'] = now
+        # Keep highest confidence reading
+        if result_entry.get('confidence', 0) > entry['best_conf']:
+            entry['best_conf'] = result_entry.get('confidence', 0)
+            entry['best_entry'] = result_entry
+
+        if entry['count'] >= STABILIZATION_FRAMES and not entry['saved']:
+            # Plate confirmed — save to DB once
+            entry['saved'] = True
+            try:
+                db.add_detection(camera_id or 'CAM-001', entry['best_entry'])
+                logger.info(f"  ✓ Stabilized plate '{normalized_plate}' after {entry['count']} frames — saved to DB")
+            except Exception as db_err:
+                logger.warning(f"DB save failed for stabilized detection: {db_err}")
+            return True
+        elif entry['count'] >= STABILIZATION_FRAMES:
+            return True  # Already saved, still show on frontend
+        else:
+            return False  # Not yet confirmed
+    else:
+        _plate_tracker[normalized_plate] = {
+            'count': 1,
+            'best_conf': result_entry.get('confidence', 0),
+            'best_entry': result_entry,
+            'last_seen': now,
+            'saved': False,
+        }
+        return False  # First sighting — don't show yet
+
+
 # ---- Live Camera Stream Processing ----
 @app.post("/api/process-frame")
 async def process_camera_frame(
@@ -579,7 +637,7 @@ async def process_camera_frame(
             
             if plate_text:
                 # Validate the plate
-                from rules.plate_rules import validate_plate
+                from rules.plate_rules import validate_plate, normalize_plate as _norm_plate
                 validation = validate_plate(plate_text, det['raw_crop'])
                 
                 logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
@@ -603,14 +661,28 @@ async def process_camera_frame(
                 if validation.vehicle_info:
                     result_entry["vehicle_info"] = validation.vehicle_info
 
-                # ── Persist to database so History/Detections pages see it ──
-                try:
-                    cam_id = camera_id or 'CAM-001'
-                    db.add_detection(cam_id, result_entry)
-                except Exception as db_err:
-                    logger.warning(f"DB save failed for detection: {db_err}")
+                # ── Stabilization: require 2+ consistent frame readings ──
+                normalized = _norm_plate(validation.detected_plate)
+                is_confirmed = _stabilize_detection(normalized, result_entry, camera_id)
 
-                results.append(result_entry)
+                if is_confirmed:
+                    # Plate confirmed across multiple frames — show with full data
+                    results.append(result_entry)
+                else:
+                    # First sighting — show bbox + "Detecting..." until confirmed
+                    results.append({
+                        "detected_plate": "Detecting...",
+                        "correct_plate": None,
+                        "violation": None,
+                        "confidence": min(1.0, round(det['confidence'], 2)),
+                        "bbox": [
+                            round(x_pct, 1),
+                            round(y_pct, 1),
+                            round(w_pct, 1),
+                            round(h_pct, 1)
+                        ],
+                        "plate_image": plate_image_data_url
+                    })
             else:
                 # No OCR text, just show the detection
                 logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")

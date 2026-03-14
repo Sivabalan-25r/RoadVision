@@ -24,22 +24,22 @@ PLATE_MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
 )
 
-DETECTION_CONF = 0.35  # YOLO confidence — balanced: catches real plates, post-OCR rejects junk
-DETECTION_IMGSZ = 640  # Larger input = better detection accuracy for distant plates
+DETECTION_CONF = 0.25  # Low threshold catches more plates; false positives filtered by OCR+rules
+DETECTION_IMGSZ = 320  # Max speed mode (35fps+ on standard CPU)
 USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
 
-# ---- Geometric Filter Thresholds (tuned for Indian plates) ----
-# Indian number plates are wider than tall, but allow some tolerance for
-# tilted / partially visible plates. Shop signs are rejected by OCR validation.
-MIN_ASPECT_RATIO = 2.0   # w/h minimum — real plates are ≥2:1 wide
-MAX_ASPECT_RATIO = 7.0   # w/h maximum (very wide plates)
-MIN_PLATE_WIDTH = 60     # Minimum crop width in pixels
-MIN_PLATE_HEIGHT = 16    # Minimum crop height in pixels
-MIN_PLATE_AREA = 900     # Minimum area in pixels
-MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area
+# ---- Geometric Filter Thresholds (from RoadVision Deep Dive) ----
+# Relaxed to catch more real plates — shop signs are rejected downstream by
+# OCR validation + Indian plate pattern matching, not by YOLO thresholds.
+MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line bike plates)
+MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
+MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
+MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
+MIN_PLATE_AREA = 750     # Rejects small background noise
+MAX_PLATE_AREA_RATIO = 0.15  # Rejected if >15% of frame (false positive windshield)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.30  # Minimum OCR confidence to accept
+OCR_MIN_CONFIDENCE = 0.25  # Balance between missing plates and noise
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
@@ -243,11 +243,11 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
         gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
         h, w = gray.shape
     
-    # Advanced denoising - always apply for better results
-    # Use Non-local Means Denoising for better quality
-    gray = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    # Bilateral filtering (the "Secret Sauce" from RoadVision Deep Dive)
+    # Smooths noise while keeping character edges sharp — faster than NLM denoising
+    gray = cv2.bilateralFilter(gray, 9, 75, 75)
 
-    # CLAHE for contrast enhancement with stronger settings
+    # CLAHE (Adaptive Histogram Equalization) — fixes shadows and glares
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
     
