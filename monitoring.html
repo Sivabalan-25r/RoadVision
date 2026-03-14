@@ -264,37 +264,75 @@
     
     // Detection settings
     const CONFIDENCE_THRESHOLD = 0.25; // Lowered to show more detections
-    const SMOOTHING_FACTOR = 0.6; // Smooth bbox movement (0-1, higher = more smoothing)
+    const SMOOTHING_FACTOR = 0.5; // Smooth bbox movement (0-1, higher = more smoothing)
+    const IOU_THRESHOLD = 0.15; // IOU threshold for tracking (low = handles fast movement)
+    let trackIdCounter = 0; // Unique track ID counter
     
-    // ---- Smooth Detections to Reduce Jitter ----
+    // ---- IOU-Based Tracking with Smooth Bbox ----
+    function calculateIOU(boxA, boxB) {
+      // boxes are [x%, y%, w%, h%] as percentages
+      const [ax, ay, aw, ah] = boxA;
+      const [bx, by, bw, bh] = boxB;
+      
+      const x1 = Math.max(ax, bx);
+      const y1 = Math.max(ay, by);
+      const x2 = Math.min(ax + aw, bx + bw);
+      const y2 = Math.min(ay + ah, by + bh);
+      
+      const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+      const areaA = aw * ah;
+      const areaB = bw * bh;
+      const union = areaA + areaB - intersection;
+      
+      return union > 0 ? intersection / union : 0;
+    }
+    
     function smoothDetections(newDetections) {
       if (previousDetections.length === 0) {
+        // Assign initial track IDs
+        newDetections.forEach(d => { d._trackId = ++trackIdCounter; });
         previousDetections = newDetections;
         return newDetections;
       }
       
       const smoothed = newDetections.map(newDet => {
-        // Find matching detection from previous frame (same plate or similar bbox)
-        const prevDet = previousDetections.find(prev => {
-          if (prev.detected_plate === newDet.detected_plate) return true;
-          
-          // Check if bboxes are close (within 10% of frame)
-          const [x1, y1, w1, h1] = prev.bbox || [0, 0, 0, 0];
-          const [x2, y2, w2, h2] = newDet.bbox || [0, 0, 0, 0];
-          const dist = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
-          return dist < 10; // Within 10% of frame
-        });
+        if (!newDet.bbox || newDet.bbox.length < 4) return newDet;
         
-        if (prevDet && prevDet.bbox && newDet.bbox) {
-          // Smooth the bounding box position
-          const smoothedBbox = newDet.bbox.map((val, i) => {
-            return prevDet.bbox[i] * SMOOTHING_FACTOR + val * (1 - SMOOTHING_FACTOR);
-          });
-          
-          return { ...newDet, bbox: smoothedBbox };
+        // Find best matching previous detection by IOU
+        let bestMatch = null;
+        let bestIOU = 0;
+        
+        for (const prev of previousDetections) {
+          if (!prev.bbox || prev.bbox.length < 4) continue;
+          const iou = calculateIOU(newDet.bbox, prev.bbox);
+          if (iou > bestIOU) {
+            bestIOU = iou;
+            bestMatch = prev;
+          }
         }
         
-        return newDet;
+        // Also check plate text match (for cases where car moved a lot)
+        if (!bestMatch || bestIOU < IOU_THRESHOLD) {
+          const textMatch = previousDetections.find(prev =>
+            prev.detected_plate && newDet.detected_plate &&
+            prev.detected_plate === newDet.detected_plate
+          );
+          if (textMatch) {
+            bestMatch = textMatch;
+          }
+        }
+        
+        if (bestMatch && bestMatch.bbox) {
+          // Smooth the bounding box for fluid movement
+          const smoothedBbox = newDet.bbox.map((val, i) =>
+            bestMatch.bbox[i] * SMOOTHING_FACTOR + val * (1 - SMOOTHING_FACTOR)
+          );
+          // Preserve track ID for continuity
+          return { ...newDet, bbox: smoothedBbox, _trackId: bestMatch._trackId || ++trackIdCounter };
+        }
+        
+        // New detection — assign fresh track ID
+        return { ...newDet, _trackId: ++trackIdCounter };
       });
       
       previousDetections = smoothed;
@@ -529,8 +567,8 @@
       currentDetections = [];
       drawDetections(currentDetections);
       if (isWebcamActive) {
-        // Process webcam frames - 3 seconds interval to reduce duplicates
-        detectionInterval = setInterval(processWebcamFrame, 3000); // Every 3 seconds
+        // Process webcam frames - 800ms interval for responsive tracking
+        detectionInterval = setInterval(processWebcamFrame, 800);
       } else {
         // Show message that webcam is needed for real detection
         alert('Please enable webcam to start real-time detection. Click the camera icon first.');
@@ -589,11 +627,11 @@
     }
 
     // ---- Process Webcam Frame ----
+    let isProcessingFrame = false; // Lock to prevent frame pileup
     async function processWebcamFrame() {
-      if (!isWebcamActive || !webcamVideo.videoWidth) {
-        console.log('Webcam not ready:', { isWebcamActive, videoWidth: webcamVideo.videoWidth });
-        return;
-      }
+      if (!isWebcamActive || !webcamVideo.videoWidth) return;
+      if (isProcessingFrame) return; // Skip if still processing previous frame
+      isProcessingFrame = true;
 
       try {
         console.log('Capturing frame from webcam...');
@@ -690,6 +728,8 @@
 
       } catch (err) {
         console.error('Frame processing error:', err);
+      } finally {
+        isProcessingFrame = false; // Release lock
       }
     }
 

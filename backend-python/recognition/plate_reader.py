@@ -25,6 +25,8 @@ PLATE_MODEL_PATH = os.path.join(
 )
 
 DETECTION_CONF = 0.30  # YOLO detection confidence threshold
+DETECTION_IMGSZ = 320  # Input size (320 = ~3x faster than 640, max speed mode)
+USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
 
 # ---- Geometric Filter Thresholds (tuned for Indian plates) ----
 MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line plates on bikes)
@@ -92,9 +94,19 @@ def load_plate_model():
 
 def _get_plate_model():
     """Return the already-loaded YOLO model (singleton)."""
-    global _plate_model
+    global _plate_model, USE_HALF
     if _plate_model is None:
-        return load_plate_model()
+        _plate_model = load_plate_model()
+    
+    # Auto-detect CUDA for half precision on first call
+    try:
+        import torch
+        if torch.cuda.is_available():
+            USE_HALF = True
+            logger.info("CUDA detected — enabling FP16 half precision for speed")
+    except Exception:
+        pass
+    
     return _plate_model
 
 
@@ -335,7 +347,14 @@ def detect_plates(
     """
     model = _get_plate_model()
 
-    results = model(frame, verbose=False, conf=DETECTION_CONF)
+    results = model(
+        frame,
+        verbose=False,
+        conf=DETECTION_CONF,
+        imgsz=DETECTION_IMGSZ,  # 416 for ~2x speed vs 640
+        half=USE_HALF,          # FP16 if CUDA available
+        agnostic_nms=True,      # Faster NMS across classes
+    )
     detections = []
     filtered_count = 0
 
