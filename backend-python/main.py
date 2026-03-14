@@ -229,7 +229,7 @@ async def analyze_video(video: UploadFile = File(...)):
                 continue
 
             # Validate against Indian RTO rules
-            validation = validate_plate(plate_text)
+            validation = validate_plate(plate_text, det.get('raw_crop'))
 
             logger.info(
                 f"Detection {idx}: '{validation.detected_plate}' → "
@@ -248,7 +248,9 @@ async def analyze_video(video: UploadFile = File(...)):
             # This applies even to unregistered vehicles, as long as the format is correct
             format_boost = 1.0
             from rules.plate_rules import PLATE_PATTERN
-            if PLATE_PATTERN.match(validation.correct_plate):
+            # Use detected_plate as fallback if correct_plate is None (legal plates)
+            plate_for_format_check = validation.correct_plate or validation.detected_plate
+            if PLATE_PATTERN.match(plate_for_format_check):
                 # Matches Indian RTO format - apply boost
                 format_boost = 1.15
             
@@ -261,18 +263,32 @@ async def analyze_video(video: UploadFile = File(...)):
                 )
             )
 
+            # Encode plate crop image as base64 for frontend evidence display
+            plate_image_b64 = None
+            try:
+                if det.get('raw_crop') is not None and det['raw_crop'].size > 0:
+                    import base64
+                    _, buf = cv2.imencode('.jpg', det['raw_crop'], [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    plate_image_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf).decode('utf-8')
+            except Exception as enc_err:
+                logger.warning(f"Could not encode plate crop: {enc_err}")
+
             detection_entry = {
                 "detected_plate": validation.detected_plate,
                 "correct_plate": validation.correct_plate,
                 "violation": validation.violation,
+                "font_anomaly": validation.font_anomaly,
                 "confidence": combined_conf,
                 "frame": det['frame_number'],
                 "bbox": det['bbox'],  # [x, y, width, height]
+                "plate_image": plate_image_b64,  # base64 JPEG crop for evidence
+                "source": "video_analysis",
             }
             
             # Add vehicle registration info if available
             if validation.vehicle_info:
                 detection_entry["vehicle_info"] = validation.vehicle_info
+
 
             # Group by normalized plate text for aggregation
             if normalized not in plate_detections:
@@ -302,6 +318,12 @@ async def analyze_video(video: UploadFile = File(...)):
                 best_detection = max(detection_list, key=lambda d: d['confidence'])
                 detections.append(best_detection)
                 processed_plates.add(normalized_plate)
+
+                # Save the final deduplicated detection to DB
+                try:
+                    db.add_detection('CAM-001', best_detection)
+                except Exception as db_err:
+                    logger.warning(f"DB save failed for deduplicated video detection: {db_err}")
                 
                 logger.debug(
                     f"Plate '{normalized_plate}': aggregated {len(detection_list)} detections, "
@@ -468,7 +490,8 @@ async def clear_detections(camera_id: str):
 async def process_camera_frame(
     file: UploadFile = File(...),
     original_width: int = Form(0),
-    original_height: int = Form(0)
+    original_height: int = Form(0),
+    camera_id: Optional[str] = Form(default='CAM-001')
 ):
     """
     Process a single camera frame and return YOLO detections with bounding boxes.
@@ -557,7 +580,7 @@ async def process_camera_frame(
             if plate_text:
                 # Validate the plate
                 from rules.plate_rules import validate_plate
-                validation = validate_plate(plate_text)
+                validation = validate_plate(plate_text, det['raw_crop'])
                 
                 logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
                 
@@ -565,6 +588,7 @@ async def process_camera_frame(
                     "detected_plate": validation.detected_plate,
                     "correct_plate": validation.correct_plate,
                     "violation": validation.violation,
+                    "font_anomaly": validation.font_anomaly,
                     "confidence": min(1.0, round(det['confidence'], 2)),
                     "bbox": [
                         round(x_pct, 1),
@@ -578,7 +602,14 @@ async def process_camera_frame(
                 # Add vehicle registration info if available
                 if validation.vehicle_info:
                     result_entry["vehicle_info"] = validation.vehicle_info
-                
+
+                # ── Persist to database so History/Detections pages see it ──
+                try:
+                    cam_id = camera_id or 'CAM-001'
+                    db.add_detection(cam_id, result_entry)
+                except Exception as db_err:
+                    logger.warning(f"DB save failed for detection: {db_err}")
+
                 results.append(result_entry)
             else:
                 # No OCR text, just show the detection

@@ -326,11 +326,9 @@
           return;
         }
 
-        // Save detections to database
-        for (const detection of data.detections) {
-          await RoadVisionAPI.Detection.add(detection);
-        }
-        console.log(`Saved ${data.detections.length} detections to database`);
+        // Detections are already saved to DB by the backend during analysis
+        // No need to call DetectionAPI.add() here
+        console.log(`Received ${data.detections.length} detections from backend (already saved to DB)`);
         
         // Update dashboard stats
         await updateDashboardStats();
@@ -338,17 +336,21 @@
         displayResults(data.detections);
 
       } catch (err) {
-        console.warn('Backend not available, using demo results:', err.message);
+        console.error('Analysis failed:', err);
         processingIndicator.style.display = 'none';
         resetAnalyzeBtn();
-
-        // Fallback: show mock results for demo purposes
-        const mockResults = [
-          { detected_plate: "TN1OAB1234", correct_plate: "TN10AB1234", violation: "Character Manipulation", confidence: 0.94, frame: 128, bbox: [40, 35, 20, 12] },
-          { detected_plate: "MH12RN9876", correct_plate: "MH 12 RN 9876", violation: "Spacing Manipulation", confidence: 0.91, frame: 256 },
-          { detected_plate: "KA01MG5566", correct_plate: "KA 01 MG 5566", violation: "Illegal Font", confidence: 0.88, frame: 384 }
-        ];
-        displayResults(mockResults);
+        // Show real error — do NOT fall back to fake/mock data
+        detectionResults.style.display = 'block';
+        resultsCount.className = 'badge alert';
+        resultsCount.textContent = 'Error';
+        resultsGrid.innerHTML = `
+          <div style="grid-column:1/-1; text-align:center; padding:40px 20px;">
+            <span class="material-symbols-outlined" style="font-size:48px; color:var(--alert); display:block; margin-bottom:12px;">error</span>
+            <p style="font-size:15px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Analysis failed</p>
+            <p style="font-size:13px; color:var(--text-muted);">${err.message}</p>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Check that the backend is running at http://localhost:8000</p>
+          </div>
+        `;
       }
     });
 
@@ -418,10 +420,17 @@
         const card = document.createElement('div');
         card.className = 'detection-card';
 
-        const imgSrc = r._evidenceImage || '';
+        // Use plate_image (YOLO crop from backend) as primary evidence;
+        // fall back to captured video frame if crop not available
+        const imgSrc = r.plate_image || r._evidenceImage || '';
+        const correctedDisplay = r.correct_plate || '— (No correction needed)';
         const imgSection = imgSrc
           ? `<div class="detection-card-img" style="padding:0; overflow:hidden;"><img src="${imgSrc}" alt="Evidence: ${r.detected_plate}" style="width:100%; height:100%; object-fit:cover;" /></div>`
           : `<div class="detection-card-img" style="background:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:700; letter-spacing:3px; color:#111; font-family:'Courier New',monospace; border-bottom:1px solid var(--border-color);">${r.detected_plate}</div>`;
+
+        const violationBadge = r.violation
+          ? `<span class="badge alert">${r.violation}</span>`
+          : `<span class="badge success">None (Legal)</span>`;
 
         card.innerHTML = `
           ${imgSection}
@@ -432,18 +441,18 @@
             </div>
             <div class="detection-row">
               <span class="detection-label">Correct Plate</span>
-              <span class="detection-value">${r.correct_plate}</span>
+              <span class="detection-value" style="color:${r.correct_plate ? 'var(--warning)' : 'var(--text-muted)'}">${correctedDisplay}</span>
             </div>
             <div class="detection-row">
               <span class="detection-label">Violation Type</span>
-              <span class="badge alert">${r.violation}</span>
+              ${violationBadge}
             </div>
             <div class="detection-row">
               <span class="detection-label">Confidence</span>
               <span class="detection-value" style="color:${confColor}; font-weight:600;">${conf}%</span>
             </div>
             ${r.frame ? `<div class="detection-row"><span class="detection-label">Frame</span><span class="detection-value">#${r.frame}</span></div>` : ''}
-            ${imgSrc ? `<button class="btn-evidence" onclick="openEvidenceModal('${imgSrc.replace(/'/g, "\\'") }', '${r.detected_plate}', '${r.correct_plate}', '${r.violation}', ${conf})"><span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence</button>` : ''}
+            ${imgSrc ? `<button class="btn-evidence" onclick="openEvidenceModal('${imgSrc.replace(/'/g, "\\'")}', '${r.detected_plate}', '${correctedDisplay}', '${r.violation || 'None'}', ${conf})"><span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence</button>` : ''}
           </div>
         `;
         resultsGrid.appendChild(card);

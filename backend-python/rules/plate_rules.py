@@ -82,12 +82,18 @@ class PlateValidationResult:
         violation: Optional[str] = None,
         confidence_modifier: float = 1.0,
         vehicle_info: Optional[Dict] = None,
+        font_anomaly: bool = False,
     ):
         self.detected_plate = detected_plate
-        self.correct_plate = correct_plate or detected_plate
+        # Only set correct_plate if it differs from detected (actual correction)
+        if correct_plate and correct_plate != detected_plate:
+            self.correct_plate = correct_plate
+        else:
+            self.correct_plate = None  # No correction needed
         self.violation = violation
         self.confidence_modifier = confidence_modifier
         self.vehicle_info = vehicle_info or {}
+        self.font_anomaly = font_anomaly
 
     @property
     def is_violation(self) -> bool:
@@ -96,8 +102,9 @@ class PlateValidationResult:
     def to_dict(self) -> dict:
         result = {
             "detected_plate": self.detected_plate,
-            "correct_plate": self.correct_plate,
+            "correct_plate": self.correct_plate,  # None if no correction
             "violation": self.violation,
+            "font_anomaly": self.font_anomaly,
         }
         if self.vehicle_info:
             result["vehicle_info"] = self.vehicle_info
@@ -337,9 +344,142 @@ def check_pattern_mismatch(plate: str) -> Optional[PlateValidationResult]:
     )
 
 
-def validate_plate(raw_text: str) -> PlateValidationResult:
+def detect_font_anomaly(plate_crop) -> dict:
+    """
+    Analyze the plate crop image for non-standard font characteristics.
+    Indian regulation requires plates to use a specific standard font
+    (Charles Wright / Mandatory font as per HSRP rules).
+    Fancy/stylized/italic/decorative fonts are illegal.
+
+    Uses STRICT thresholds to avoid false positives on standard plates
+    captured via low-quality webcam images (which naturally have noisy
+    edges, uneven lighting, and compression artifacts).
+
+    Only flags truly decorative/fancy fonts — NOT standard plates
+    that happen to have low image quality.
+
+    Returns dict with:
+      - is_anomaly: bool (True if non-standard font detected)
+      - confidence: float (0-1, how confident we are it's non-standard)
+      - reason: str (description of the anomaly)
+    """
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return {"is_anomaly": False, "confidence": 0.0, "reason": ""}
+
+    if plate_crop is None or (hasattr(plate_crop, 'size') and plate_crop.size == 0):
+        return {"is_anomaly": False, "confidence": 0.0, "reason": ""}
+
+    anomaly_score = 0.0
+    reasons = []
+
+    # Convert to grayscale
+    if len(plate_crop.shape) == 3:
+        gray = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = plate_crop.copy()
+
+    h, w = gray.shape[:2]
+    if h < 15 or w < 40:
+        return {"is_anomaly": False, "confidence": 0.0, "reason": ""}
+
+    # --- 1. Stroke Width Variance ---
+    # Standard block fonts have very uniform stroke widths.
+    # Only flag when CV is EXTREMELY high (fancy calligraphy/script fonts).
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    dist_transform = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
+    stroke_pixels = dist_transform[dist_transform > 0]
+
+    if len(stroke_pixels) > 50:
+        stroke_std = np.std(stroke_pixels)
+        stroke_mean = np.mean(stroke_pixels)
+        if stroke_mean > 0:
+            cv_ratio = stroke_std / stroke_mean
+            # Very strict: only flag CV > 0.85 (script/calligraphy fonts)
+            if cv_ratio > 0.85:
+                anomaly_score += 0.30
+                reasons.append(f"Highly variable stroke width (CV={cv_ratio:.2f})")
+
+    # --- 2. Edge Density ---
+    # Only flag extremely dense edges (ornamental/decorative fonts).
+    # Standard plates with noise typically stay under 0.30.
+    edges = cv2.Canny(gray, 80, 200)  # Tighter Canny thresholds
+    edge_density = np.sum(edges > 0) / (h * w)
+    if edge_density > 0.35:
+        anomaly_score += 0.20
+        reasons.append(f"Very high edge density ({edge_density:.2f}) — decorative font")
+
+    # --- 3. Character Contour Analysis ---
+    # Only flag when characters are extremely jagged/ornate.
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) >= 4:
+        complexity_scores = []
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            perimeter = cv2.arcLength(cnt, True)
+            if area > 50 and perimeter > 0:  # Larger minimum area
+                circularity = (4 * np.pi * area) / (perimeter * perimeter)
+                complexity_scores.append(circularity)
+
+        if len(complexity_scores) >= 3:
+            avg_circularity = np.mean(complexity_scores)
+            # Very strict: only flag circularity < 0.10 (heavily ornate)
+            if avg_circularity < 0.10:
+                anomaly_score += 0.25
+                reasons.append(f"Highly ornate character shapes (circularity={avg_circularity:.2f})")
+
+    # --- 4. Vertical Projection Regularity ---
+    # Only flag extreme spacing irregularity (CV > 1.2).
+    v_projection = np.sum(binary > 0, axis=0)
+    threshold = h * 0.15
+    gaps = []
+    in_gap = False
+    gap_start = 0
+    for col_idx, val in enumerate(v_projection):
+        if val < threshold and not in_gap:
+            in_gap = True
+            gap_start = col_idx
+        elif val >= threshold and in_gap:
+            in_gap = False
+            gap_width = col_idx - gap_start
+            if gap_width > 2:  # Ignore tiny gaps (noise)
+                gaps.append(gap_width)
+
+    if len(gaps) >= 4:
+        gap_std = np.std(gaps)
+        gap_mean = np.mean(gaps)
+        if gap_mean > 0:
+            gap_cv = gap_std / gap_mean
+            if gap_cv > 1.2:
+                anomaly_score += 0.15
+                reasons.append(f"Very irregular character spacing (gap CV={gap_cv:.2f})")
+
+    # Final decision — STRICT trigger threshold
+    # Requires multiple strong signals to flag as non-standard font
+    is_anomaly = anomaly_score >= 0.55
+    confidence = min(anomaly_score, 1.0)
+    reason = "; ".join(reasons) if reasons else ""
+
+    if is_anomaly:
+        logger.info(f"Font anomaly detected (score={anomaly_score:.2f}): {reason}")
+    else:
+        logger.debug(f"Font check passed (score={anomaly_score:.2f})")
+
+    return {
+        "is_anomaly": is_anomaly,
+        "confidence": confidence,
+        "reason": reason,
+    }
+
+
+def validate_plate(raw_text: str, plate_crop=None) -> PlateValidationResult:
     """
     Run all validation rules on a detected plate.
+
+    Only plates that have a violation get a 'correct_plate' reconstruction.
+    Legal plates are left as-is (correct_plate = None = no correction needed).
 
     Detection order (violations checked BEFORE normalization hides them):
       1. Store the original OCR output
@@ -369,6 +509,10 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
     # Step 3b: Apply context-aware character normalization
     corrected_plate, corrections = smart_normalize(cleaned)
 
+    # Step 3c: Detect font anomalies on the plate crop image
+    font_result = detect_font_anomaly(plate_crop) if plate_crop is not None else {"is_anomaly": False, "confidence": 0.0, "reason": ""}
+    has_font_anomaly = font_result.get("is_anomaly", False)
+
     # Step 4: Determine violations — check in priority order
 
     # Priority 1: Tampered Plate (3+ character corrections with bad state)
@@ -380,15 +524,18 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
             correct_plate=corrected_plate,
             violation="Tampered Plate",
             confidence_modifier=0.75,
+            font_anomaly=has_font_anomaly,
         )
 
     # Priority 2: Character Manipulation (original differs from corrected)
     if corrections:
+        violation_type = "Non-Standard Font / Character Manipulation" if has_font_anomaly else "Character Manipulation"
         return PlateValidationResult(
             detected_plate=cleaned,
             correct_plate=corrected_plate,
-            violation="Character Manipulation",
-            confidence_modifier=0.95,
+            violation=violation_type,
+            confidence_modifier=0.90 if has_font_anomaly else 0.95,
+            font_anomaly=has_font_anomaly,
         )
 
     # Priority 3: Spacing Manipulation
@@ -398,13 +545,24 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
         if spacing_result:
             return spacing_result
 
-    # Priority 4: Pattern Mismatch (doesn't fit Indian format)
+    # Priority 4: Non-Standard Font (without other violations)
+    if has_font_anomaly and not corrections:
+        return PlateValidationResult(
+            detected_plate=cleaned,
+            correct_plate=None,  # No text correction needed, just font flagged
+            violation="Non-Standard Font",
+            confidence_modifier=0.85,
+            font_anomaly=True,
+        )
+
+    # Priority 5: Pattern Mismatch (doesn't fit Indian format)
     if not PLATE_PATTERN.match(corrected_plate):
         return PlateValidationResult(
             detected_plate=cleaned,
             correct_plate=corrected_plate,
             violation="Plate Pattern Mismatch",
             confidence_modifier=0.8,
+            font_anomaly=has_font_anomaly,
         )
 
     # Priority 5: Check vehicle registration database
@@ -419,10 +577,11 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
         logger.info(f"Unregistered vehicle detected: '{corrected_plate}'")
         return PlateValidationResult(
             detected_plate=cleaned,
-            correct_plate=corrected_plate,
+            correct_plate=corrected_plate if corrected_plate != cleaned else None,
             violation="Unregistered Vehicle",
             confidence_modifier=0.85,
             vehicle_info=vehicle_info,
+            font_anomaly=has_font_anomaly,
         )
 
     # Priority 6: Invalid State Code (only if registered check passed)
@@ -430,16 +589,19 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
     if state not in VALID_STATE_CODES:
         return PlateValidationResult(
             detected_plate=cleaned,
-            correct_plate=corrected_plate,
+            correct_plate=corrected_plate if corrected_plate != cleaned else None,
             violation="Invalid State Code",
             confidence_modifier=0.7,
             vehicle_info=vehicle_info,
+            font_anomaly=has_font_anomaly,
         )
 
     # No violations — valid and registered plate
+    # Legal plates get NO correction (correct_plate = None)
     return PlateValidationResult(
         detected_plate=cleaned,
-        correct_plate=corrected_plate,
+        correct_plate=None,  # No correction needed for legal plates
         violation=None,
         vehicle_info=vehicle_info,
+        font_anomaly=has_font_anomaly,
     )

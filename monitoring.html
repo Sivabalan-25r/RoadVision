@@ -160,7 +160,6 @@
   </div>
 
   <!-- Scripts loaded once at the bottom -->
-  <script src="config.js"></script>
   <script src="api-client.js"></script>
   <script src="components/loader.js"></script>
   <script src="components/evidence-store.js"></script>
@@ -567,8 +566,8 @@
       currentDetections = [];
       drawDetections(currentDetections);
       if (isWebcamActive) {
-        // Process webcam frames - 800ms interval for responsive tracking
-        detectionInterval = setInterval(processWebcamFrame, 800);
+        // Process webcam frames - 500ms interval for fast tracking
+        detectionInterval = setInterval(processWebcamFrame, 500);
       } else {
         // Show message that webcam is needed for real detection
         alert('Please enable webcam to start real-time detection. Click the camera icon first.');
@@ -660,6 +659,9 @@
         formData.append('file', blob, 'frame.jpg');
         formData.append('original_width', originalWidth.toString());
         formData.append('original_height', originalHeight.toString());
+        // Pass camera_id so backend saves detection under correct camera
+        const camId = (window.RoadVisionAPI && RoadVisionAPI.getCurrentCameraId) ? RoadVisionAPI.getCurrentCameraId() : 'CAM-001';
+        formData.append('camera_id', camId);
 
         console.log('Sending frame to backend with original dimensions...');
         const res = await fetch(RoadVisionConfig.getApiUrl('PROCESS_FRAME'), {

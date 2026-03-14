@@ -24,20 +24,22 @@ PLATE_MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
 )
 
-DETECTION_CONF = 0.30  # YOLO detection confidence threshold
+DETECTION_CONF = 0.45  # YOLO detection confidence threshold (higher = fewer false positives)
 DETECTION_IMGSZ = 320  # Input size (320 = ~3x faster than 640, max speed mode)
 USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
 
 # ---- Geometric Filter Thresholds (tuned for Indian plates) ----
-MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line plates on bikes)
-MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
-MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
-MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
-MIN_PLATE_AREA = 750     # Minimum area in pixels
-MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area (rejects windshield detections)
+# Indian number plates are ALWAYS wider than tall.
+# Shop boards / signage tend to be more square — excluded by aspect ratio.
+MIN_ASPECT_RATIO = 2.5   # w/h minimum — real plates are at least 2.5:1 wide
+MAX_ASPECT_RATIO = 7.0   # w/h maximum (very wide plates)
+MIN_PLATE_WIDTH = 80     # Minimum crop width in pixels (shop text tends to be smaller)
+MIN_PLATE_HEIGHT = 18    # Minimum crop height in pixels
+MIN_PLATE_AREA = 1500    # Minimum area in pixels (was 750 — reject tiny background text)
+MAX_PLATE_AREA_RATIO = 0.12  # Max fraction of frame area (rejects windshield detections)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.25  # Minimum OCR confidence to accept
+OCR_MIN_CONFIDENCE = 0.40  # Minimum OCR confidence (was 0.25, raised to reduce noise)
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
@@ -53,6 +55,9 @@ OCR_CORRECTIONS = {
 KNOWN_FALSE_POSITIVES = {
     'IND', 'INDIA', 'TEST', 'SAMPLE', 'DEMO',
     'GOVT', 'POLICE', 'TAXI', 'AUTO',
+    # Shop / building sign patterns (non-plate alphanumeric strings)
+    'SHOP', 'STORE', 'MART', 'HOTEL', 'CAFE', 'OPEN', 'CLOSED',
+    'PHONE', 'MOBILE', 'CALL', 'EXIT', 'ROAD', 'STREET', 'NAGAR',
 }
 
 
