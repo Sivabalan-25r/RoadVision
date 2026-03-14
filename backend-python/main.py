@@ -437,6 +437,7 @@ class Detection(BaseModel):
     bbox: list = []
     plate_image: str = ""
     source: str = "live_monitoring"
+    vehicle_info: dict = {}
 
 
 @app.post("/api/detections/{camera_id}")

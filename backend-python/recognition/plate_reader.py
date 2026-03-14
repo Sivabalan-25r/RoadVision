@@ -24,18 +24,18 @@ PLATE_MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
 )
 
-DETECTION_CONF = 0.40  # YOLO detection confidence threshold
+DETECTION_CONF = 0.30  # YOLO detection confidence threshold
 
 # ---- Geometric Filter Thresholds (tuned for Indian plates) ----
-MIN_ASPECT_RATIO = 2.0   # w/h minimum — plates are always wider than tall
+MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line plates on bikes)
 MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
-MIN_PLATE_WIDTH = 60     # Minimum crop width in pixels
+MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
 MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
-MIN_PLATE_AREA = 900     # Minimum area in pixels
+MIN_PLATE_AREA = 750     # Minimum area in pixels
 MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area (rejects windshield detections)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.30  # Minimum OCR confidence to accept
+OCR_MIN_CONFIDENCE = 0.25  # Minimum OCR confidence to accept
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
