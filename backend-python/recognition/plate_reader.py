@@ -24,17 +24,18 @@ PLATE_MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
 )
 
-DETECTION_CONF = 0.25  # YOLO detection confidence threshold (lowered to catch more plates)
+DETECTION_CONF = 0.40  # YOLO detection confidence threshold
 
-# ---- Geometric Filter Thresholds (tuned for Indian roads) ----
-MIN_ASPECT_RATIO = 1.2   # w/h minimum (standard plate ratio)
+# ---- Geometric Filter Thresholds (tuned for Indian plates) ----
+MIN_ASPECT_RATIO = 2.0   # w/h minimum — plates are always wider than tall
 MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
-MIN_PLATE_WIDTH = 40     # Minimum crop width in pixels (lowered to catch more plates)
-MIN_PLATE_HEIGHT = 12    # Minimum crop height in pixels (lowered to catch more plates)
-MIN_PLATE_AREA = 480     # Minimum area in pixels (lowered to catch more plates)
+MIN_PLATE_WIDTH = 60     # Minimum crop width in pixels
+MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
+MIN_PLATE_AREA = 900     # Minimum area in pixels
+MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area (rejects windshield detections)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.25  # Lowered to catch more valid plates
+OCR_MIN_CONFIDENCE = 0.30  # Minimum OCR confidence to accept
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
@@ -101,14 +102,16 @@ def _get_plate_model():
 
 def passes_geometric_filter(
     x1: int, y1: int, x2: int, y2: int,
+    frame_width: int = 0, frame_height: int = 0,
 ) -> bool:
     """
     Apply geometric filters to a detected plate bounding box.
 
     Rejects if:
-      - Aspect ratio (w/h) outside [1.5, 6.0]
-      - Width < 100 or height < 30
-      - Area < 3000 pixels
+      - Aspect ratio (w/h) outside [2.0, 7.0]
+      - Width < 60 or height < 15
+      - Area < 900 pixels
+      - Area > 15% of frame (rejects windshield/window detections)
     """
     w = x2 - x1
     h = y2 - y1
@@ -126,6 +129,12 @@ def passes_geometric_filter(
     area = w * h
     if area < MIN_PLATE_AREA:
         return False
+    
+    # Reject detections that are too large (e.g., windshield, full vehicle)
+    if frame_width > 0 and frame_height > 0:
+        frame_area = frame_width * frame_height
+        if area > frame_area * MAX_PLATE_AREA_RATIO:
+            return False
 
     return True
 
@@ -234,9 +243,9 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     # Apply multiple threshold methods and select best result
     thresh = _apply_multiple_thresholds(sharpened)
     
-    # Morphological operations to clean up and connect broken characters
-    # Use a small kernel to close gaps in characters
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    # Light morphological close to fill small gaps in characters
+    # Use horizontal-only kernel to avoid merging adjacent characters vertically
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 2))
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
     # Resize to standard OCR input size while preserving aspect ratio
@@ -260,19 +269,17 @@ def _refine_bounding_box(
     original_bbox: Tuple[int, int, int, int]
 ) -> Tuple[Optional[np.ndarray], Tuple[int, int, int, int]]:
     """
-    Refine YOLO bounding box to tightly crop only the plate region.
+    Apply light padding to YOLO bounding box to remove vehicle body.
     
-    Removes vehicle body and background by:
-      1. Cropping 5-10% padding from edges
-      2. Applying edge detection to find plate boundaries
-      3. Validating the refined region contains plate-like content
+    Only trims a small border — does NOT use contour detection,
+    which was previously cutting off the last digits of plates.
     
     Args:
         plate_crop: Original BGR plate crop from YOLO detection
         original_bbox: Original (x1, y1, x2, y2) coordinates
         
     Returns:
-        Tuple of (refined_crop, refined_bbox) or (None, original_bbox) if refinement fails
+        Tuple of (refined_crop, refined_bbox)
     """
     if plate_crop is None or plate_crop.size == 0:
         return None, original_bbox
@@ -280,72 +287,31 @@ def _refine_bounding_box(
     h, w = plate_crop.shape[:2]
     x1_orig, y1_orig, x2_orig, y2_orig = original_bbox
     
-    # Step 1: Crop 3-5% padding from edges to remove vehicle body/background
-    # Use 4% as a balanced middle ground (reduced from 7% to preserve more plate content)
-    padding_percent = 0.04
+    # Only trim 2% from edges — enough to remove border noise
+    # without cutting off characters at the edges
+    padding_percent = 0.02
     pad_x = int(w * padding_percent)
     pad_y = int(h * padding_percent)
     
-    # Ensure we don't over-crop
+    # Safety: never crop more than a few pixels
+    pad_x = min(pad_x, 5)
+    pad_y = min(pad_y, 3)
+    
+    # Ensure we don't over-crop tiny plates
     if pad_x * 2 >= w or pad_y * 2 >= h:
-        pad_x = max(1, w // 20)
-        pad_y = max(1, h // 20)
+        return plate_crop, original_bbox
     
     cropped = plate_crop[pad_y:h-pad_y, pad_x:w-pad_x]
     
     if cropped.size == 0:
-        return None, original_bbox
+        return plate_crop, original_bbox
     
-    # Step 2: Apply edge detection to find actual plate boundaries
-    gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY) if len(cropped.shape) == 3 else cropped
+    new_x1 = x1_orig + pad_x
+    new_y1 = y1_orig + pad_y
+    new_x2 = x2_orig - pad_x
+    new_y2 = y2_orig - pad_y
     
-    # Use Canny edge detection
-    edges = cv2.Canny(gray, 50, 150)
-    
-    # Find contours from edges
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    if not contours:
-        # No edges found, use the padded crop
-        new_x1 = x1_orig + pad_x
-        new_y1 = y1_orig + pad_y
-        new_x2 = x2_orig - pad_x
-        new_y2 = y2_orig - pad_y
-        return cropped, (new_x1, new_y1, new_x2, new_y2)
-    
-    # Find the bounding rectangle that encompasses all significant contours
-    # Filter contours by area to ignore noise
-    min_contour_area = (cropped.shape[0] * cropped.shape[1]) * 0.01  # 1% of image
-    significant_contours = [c for c in contours if cv2.contourArea(c) > min_contour_area]
-    
-    if not significant_contours:
-        # Use all contours if filtering removed everything
-        significant_contours = contours
-    
-    # Get bounding box of all significant contours
-    all_points = np.vstack(significant_contours)
-    x, y, w_box, h_box = cv2.boundingRect(all_points)
-    
-    # Step 3: Validate the refined region
-    # Ensure the refined box is reasonable (not too small)
-    if w_box < cropped.shape[1] * 0.3 or h_box < cropped.shape[0] * 0.3:
-        # Refined box is too small, use padded crop instead
-        new_x1 = x1_orig + pad_x
-        new_y1 = y1_orig + pad_y
-        new_x2 = x2_orig - pad_x
-        new_y2 = y2_orig - pad_y
-        return cropped, (new_x1, new_y1, new_x2, new_y2)
-    
-    # Extract the refined crop
-    refined = cropped[y:y+h_box, x:x+w_box]
-    
-    # Calculate new absolute coordinates
-    new_x1 = x1_orig + pad_x + x
-    new_y1 = y1_orig + pad_y + y
-    new_x2 = new_x1 + w_box
-    new_y2 = new_y1 + h_box
-    
-    return refined, (new_x1, new_y1, new_x2, new_y2)
+    return cropped, (new_x1, new_y1, new_x2, new_y2)
 
 
 # ---- YOLO Detection ----
@@ -407,8 +373,8 @@ def detect_plates(
             x2 = min(w_img, x2)
             y2 = min(h_img, y2)
 
-            # Apply geometric filters
-            if not passes_geometric_filter(x1, y1, x2, y2):
+            # Apply geometric filters (pass frame dimensions for max area check)
+            if not passes_geometric_filter(x1, y1, x2, y2, w_img, h_img):
                 filtered_count += 1
                 w, h = x2 - x1, y2 - y1
                 ratio = w / h if h > 0 else 0
@@ -674,6 +640,11 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
             return None
 
         cleaned = clean_text(raw_text)
+        
+        # Apply position-based corrections (e.g., 0→O in letter positions, O→0 in digit positions)
+        # This ensures the plate text matches the expected Indian format before validation
+        cleaned = _apply_position_based_corrections(cleaned)
+        
         logger.info(f"OCR: '{raw_text}' → cleaned: '{cleaned}' (conf: {confidence:.2f})")
 
         if is_garbage_text(cleaned):

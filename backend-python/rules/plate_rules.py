@@ -7,8 +7,11 @@ Integrates with vehicle registration database for ownership verification.
 """
 
 import re
+import logging
 from typing import Optional, Dict
 from registration_db import lookup_vehicle, is_registered_plate
+
+logger = logging.getLogger(__name__)
 
 # =============================================
 # Indian RTO Plate Pattern
@@ -409,7 +412,7 @@ def validate_plate(raw_text: str) -> PlateValidationResult:
     # This check happens BEFORE invalid state code check because
     # an unregistered vehicle is a more serious violation
     vehicle_info = lookup_vehicle(corrected_plate)
-    logger.debug(f"Registration lookup for '{corrected_plate}': registered={vehicle_info.get('registered')}")
+    logger.info(f"Registration lookup for '{corrected_plate}' (cleaned='{cleaned}'): registered={vehicle_info.get('registered')}")
     
     if not vehicle_info.get("registered"):
         # Unregistered vehicle - this is a violation

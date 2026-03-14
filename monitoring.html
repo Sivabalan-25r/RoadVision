@@ -59,7 +59,7 @@
           <div class="playback-controls">
             <button class="material-symbols-outlined" id="toggleWebcam">videocam</button>
             <button class="material-symbols-outlined" style="font-size:36px" id="toggleDetection">play_circle</button>
-            <button class="material-symbols-outlined">fullscreen</button>
+            <button class="material-symbols-outlined" id="toggleFullscreen">fullscreen</button>
           </div>
 
           <!-- Live Detection Stats Overlay -->
@@ -812,6 +812,45 @@
           ctx.font = 'bold 14px Arial';
           ctx.fillStyle = '#ffffff';
           ctx.fillText(icon, labelX + labelW - 20, labelY + 14);
+        }
+      });
+    }
+
+    // ---- Fullscreen Toggle ----
+    const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
+    if (toggleFullscreenBtn) {
+      toggleFullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          // Enter fullscreen on the viewer container
+          const target = viewer;
+          if (target.requestFullscreen) {
+            target.requestFullscreen();
+          } else if (target.webkitRequestFullscreen) {
+            target.webkitRequestFullscreen();
+          } else if (target.msRequestFullscreen) {
+            target.msRequestFullscreen();
+          }
+          toggleFullscreenBtn.textContent = 'fullscreen_exit';
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+          }
+          toggleFullscreenBtn.textContent = 'fullscreen';
+        }
+      });
+
+      // Update icon when exiting fullscreen via Escape key
+      document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement) {
+          toggleFullscreenBtn.textContent = 'fullscreen';
+          resizeCanvas();
+        } else {
+          toggleFullscreenBtn.textContent = 'fullscreen_exit';
+          resizeCanvas();
         }
       });
     }

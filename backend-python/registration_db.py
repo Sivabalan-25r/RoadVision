@@ -720,55 +720,78 @@ def lookup_vehicle(plate_number: str) -> Dict:
     """
     Look up a vehicle in the mock registration database.
     
+    Supports fuzzy matching: if no exact match, searches for plates with
+    the same state+district prefix and Levenshtein distance ≤ 2.
+    
     Args:
-        plate_number: Vehicle registration number (e.g., "TN10AB1234" or "TN 10 AB 1234")
+        plate_number: Vehicle registration number (e.g., "TN10AB1234")
     
     Returns:
         Dictionary with registration details if found, or unregistered status
-        
-    Examples:
-        >>> lookup_vehicle("TN10AB1234")
-        {
-            "registered": True,
-            "owner_name": "Ravi Kumar",
-            "vehicle_type": "Car",
-            "state": "Tamil Nadu",
-            "rto": "Chennai South",
-            "model": "Maruti Swift",
-            "color": "White"
-        }
-        
-        >>> lookup_vehicle("XX99ZZ9999")
-        {
-            "registered": False,
-            "owner_name": None,
-            "vehicle_type": None,
-            "state": None,
-            "rto": None,
-            "model": None,
-            "color": None
-        }
     """
     # Normalize the plate number
     normalized_plate = normalize_plate(plate_number)
     
-    # Look up in registry
+    # Exact match first
     if normalized_plate in MOCK_REGISTRY:
         vehicle_info = MOCK_REGISTRY[normalized_plate].copy()
         vehicle_info["registered"] = True
         vehicle_info["plate_number"] = normalized_plate
         return vehicle_info
-    else:
-        return {
-            "registered": False,
-            "plate_number": normalized_plate,
-            "owner_name": None,
-            "vehicle_type": None,
-            "state": None,
-            "rto": None,
-            "model": None,
-            "color": None
-        }
+    
+    # Fuzzy match: find closest plate with same state code prefix (first 2 chars)
+    if len(normalized_plate) >= 4:
+        prefix = normalized_plate[:4]  # State + district code
+        best_match = None
+        best_distance = 999
+        
+        for reg_plate in MOCK_REGISTRY:
+            # Must share same state+district prefix
+            if reg_plate[:4] != prefix:
+                continue
+            
+            # Calculate edit distance
+            distance = _levenshtein_distance(normalized_plate, reg_plate)
+            if distance <= 2 and distance < best_distance:
+                best_distance = distance
+                best_match = reg_plate
+        
+        if best_match:
+            vehicle_info = MOCK_REGISTRY[best_match].copy()
+            vehicle_info["registered"] = True
+            vehicle_info["plate_number"] = best_match
+            vehicle_info["fuzzy_match"] = True
+            vehicle_info["ocr_read"] = normalized_plate
+            return vehicle_info
+    
+    return {
+        "registered": False,
+        "plate_number": normalized_plate,
+        "owner_name": None,
+        "vehicle_type": None,
+        "state": None,
+        "rto": None,
+        "model": None,
+        "color": None
+    }
+
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Calculate Levenshtein distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (c1 != c2)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    return prev_row[-1]
 
 
 def is_registered_plate(plate_number: str) -> bool:
