@@ -41,21 +41,23 @@ PLATE_MODEL_PATH = os.path.join(
 )
 
 # Aggressive filtering to eliminate background ghosts
-DETECTION_CONF = 0.25  # YOLO detection confidence threshold (Lowered to catch more plates)
-DETECTION_IMGSZ = 320  # Input size (320 = ~3x faster than 640, max speed mode)
+DETECTION_CONF = 0.25  # Low threshold catches more plates; false positives filtered by OCR+rules
+DETECTION_IMGSZ = 320  # Max speed mode (35fps+ on standard CPU)
 USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
 
-# ---- Geometric Filter Thresholds (tuned for Indian plates) ----
-MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line plates on bikes)
+# ---- Geometric Filter Thresholds (from RoadVision Deep Dive) ----
+# Relaxed to catch more real plates — shop signs are rejected downstream by
+# OCR validation + Indian plate pattern matching, not by YOLO thresholds.
+MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line bike plates)
 MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
 MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
 MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
-MIN_PLATE_AREA = 750     # Minimum area in pixels
+MIN_PLATE_AREA = 750     # Rejects small background noise
 MAX_PLATE_AREA = 100000  # Reject anything taking too much screen (likely error)
-MAX_PLATE_AREA_RATIO = 0.15  # Max fraction of frame area (rejects windshield detections)
+MAX_PLATE_AREA_RATIO = 0.15  # Rejected if >15% of frame (false positive windshield)
 
 # ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.25  # Minimum OCR confidence to accept
+OCR_MIN_CONFIDENCE = 0.25  # Balance between missing plates and noise
 
 # ---- Text Cleaning ----
 MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
@@ -71,6 +73,9 @@ OCR_CORRECTIONS = {
 KNOWN_FALSE_POSITIVES = {
     'IND', 'INDIA', 'TEST', 'SAMPLE', 'DEMO',
     'GOVT', 'POLICE', 'TAXI', 'AUTO',
+    # Shop / building sign patterns (non-plate alphanumeric strings)
+    'SHOP', 'STORE', 'MART', 'HOTEL', 'CAFE', 'OPEN', 'CLOSED',
+    'PHONE', 'MOBILE', 'CALL', 'EXIT', 'ROAD', 'STREET', 'NAGAR',
 }
 
 
@@ -265,7 +270,11 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
         gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
         h, w = gray.shape
     
-    gray = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    # Bilateral filtering (the "Secret Sauce" from RoadVision Deep Dive)
+    # Smooths noise while keeping character edges sharp — faster than NLM denoising
+    gray = cv2.bilateralFilter(gray, 9, 75, 75)
+
+    # CLAHE (Adaptive Histogram Equalization) — fixes shadows and glares
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
     
@@ -283,10 +292,6 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     
     return cv2.resize(thresh, (target_width, target_height), interpolation=cv2.INTER_CUBIC)
 
-def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
-    """Legacy wrapper for single-crop logic."""
-    variants = preprocess_plate_variants(plate_crop)
-    return variants[2] # Return the sharpened one as default
 
 
 # ---- Bounding Box Refinement ----
@@ -373,9 +378,6 @@ def detect_plates(
     # Get class name mapping from model
     class_names: Dict[int, str] = getattr(model, 'names', {}) or {}
 
-    # Create debug directory
-    debug_dir = str(os.path.join(os.path.dirname(__file__), '..', 'debug_plates'))
-    os.makedirs(debug_dir, exist_ok=True)
 
     for result in results:
         boxes = result.boxes
@@ -433,21 +435,8 @@ def detect_plates(
             # Update coordinates with refined bbox
             x1, y1, x2, y2 = refined_bbox
 
-            # Save debug image
-            debug_path = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_raw.png')
-            if refined_crop is not None:
-                cv2.imwrite(debug_path, refined_crop)
-                logger.info(f"Saved debug plate: {debug_path} (size: {refined_crop.shape})")
-
-                # Preprocess for recognition (upscale → CLAHE → blur → Sharpen)
-                processed = preprocess_plate_crop(refined_crop)
-            else:
-                # Fallback to raw crop if refinement failed
-                processed = preprocess_plate_crop(raw_crop)
-
-            # Save preprocessed debug image
-            debug_path_proc = os.path.join(debug_dir, f'frame{frame_number}_plate{detection_idx}_processed.png')
-            cv2.imwrite(debug_path_proc, processed)
+            # Preprocess for recognition (upscale → CLAHE → blur → OTSU → 320×120)
+            processed = preprocess_plate_crop(refined_crop)
 
             w_box = clamped_x2 - clamped_x1
             h_box = clamped_y2 - clamped_y1
@@ -712,7 +701,7 @@ def get_read_confidence(plate_image: np.ndarray, preprocessed_image: np.ndarray 
     try:
         ocr_image = preprocessed_image if preprocessed_image is not None else plate_image
         _, confidence = recognize_plate(plate_image, ocr_image)
-        return float(confidence)
+        return float(confidence) if confidence is not None else 0.0
     except Exception as e:
         logger.error(f"OCR confidence error: {e}")
         return 0.0

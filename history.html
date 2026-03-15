@@ -91,13 +91,9 @@
             <span class="material-symbols-outlined" style="font-size:48px;">history</span>
           </div>
           <h3 style="margin-bottom:8px; color:var(--text);">No History Yet</h3>
-          <p style="color:var(--text-muted); font-size:14px; margin-bottom:24px;">
-            Upload a video on the Dashboard to start building your detection history.
+          <p style="color:var(--text-muted); font-size:14px;">
+            Detections will appear here after analyzing a video or using live monitoring.
           </p>
-          <a href="index.html" class="btn-primary">
-            <span class="material-symbols-outlined" style="font-size:18px;">upload</span>
-            Go to Dashboard
-          </a>
         </div>
 
         <!-- History Table -->
@@ -181,15 +177,23 @@
             ? `<div class="plate-thumbnail"><img src="data:image/jpeg;base64,${det.plate_image}" alt="Plate" /></div>`
             : `<div class="plate-thumbnail-placeholder">No Image</div>`;
 
+          const correctedDisplay = det.correct_plate ? 
+            `<span style="color:var(--warning); font-weight:600;">${det.correct_plate}</span>` : 
+            '<span style="color:var(--text-muted)">—</span>';
+          
+          // Font anomaly badge
+          const fontBadge = det.font_anomaly ? 
+            '<span class="badge warning" style="font-size:10px; margin-left:4px;">Non-Standard Font</span>' : '';
+
           return `
             <tr>
-              <td><span class="plate-number">${det.detected_plate}</span></td>
-              <td>${thumbnailHtml}</td>
+              <td><span class="plate-number">${det.detected_plate}</span>${fontBadge}</td>
+              <td>${correctedDisplay}</td>
               <td><span class="badge ${badgeClass}">${statusText}</span></td>
               <td style="color:var(--success); font-weight:600;">${confidence}%</td>
               <td style="color:var(--text-muted); font-size:12px;">${timeStr}</td>
               <td style="text-align:right">
-                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate || det.detected_plate}', '${statusText}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
+                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate || ''}', '${statusText}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
                   <span class="material-symbols-outlined">visibility</span>
                 </button>
               </td>
@@ -279,130 +283,431 @@
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
+      const PW = doc.internal.pageSize.getWidth();   // 210
+      const PH = doc.internal.pageSize.getHeight();  // 297
 
-      // ---- Header ----
-      doc.setFillColor(2, 6, 23); // Dark background
-      doc.rect(0, 0, pageWidth, 40, 'F');
-      doc.setFontSize(22);
-      doc.setTextColor(99, 102, 241); // Primary blue
-      doc.text('RoadVision', 14, 18);
-      doc.setFontSize(10);
-      doc.setTextColor(148, 163, 184); // Muted text
-      doc.text('AI-Powered Traffic Surveillance Report', 14, 26);
-      
+      // ─── Color palette ───────────────────────────────────────────
+      const C = {
+        navy:    [2,  6,  23],
+        brand:   [99, 102, 241],
+        brandDk: [67, 56, 202],
+        red:     [220, 38, 38],
+        green:   [22, 163, 74],
+        orange:  [234, 88, 12],
+        yellow:  [202, 138, 4],
+        muted:   [100, 116, 139],
+        light:   [241, 245, 249],
+        white:   [255, 255, 255],
+        dark:    [15, 23, 42],
+        border:  [203, 213, 225],
+      };
+
+      // ─── Utility helpers ─────────────────────────────────────────
       const now = new Date();
-      const dateStr = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-      const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-      doc.text(`Generated: ${dateStr} at ${timeStr}`, 14, 33);
+      const dateStr = now.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+      const timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 
-      // ---- Summary Stats ----
-      const totalDetections = detections.length;
-      const violations = detections.filter(d => d.violation).length;
-      const legal = totalDetections - violations;
-      const registered = detections.filter(d => d.vehicle_registered || (d.vehicle_info && d.vehicle_info.registered)).length;
-      const unregistered = totalDetections - registered;
-      const avgConf = detections.reduce((sum, d) => sum + (d.confidence || 0), 0) / totalDetections;
-
-      doc.setFontSize(14);
-      doc.setTextColor(30, 41, 59);
-      doc.text('Summary', 14, 52);
-
-      doc.autoTable({
-        startY: 56,
-        head: [['Total Scanned', 'Violations', 'Legal', 'Registered', 'Unregistered', 'Avg Confidence']],
-        body: [[totalDetections, violations, legal, registered, unregistered, Math.round(avgConf * 100) + '%']],
-        theme: 'grid',
-        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontSize: 9, halign: 'center' },
-        bodyStyles: { halign: 'center', fontSize: 10 },
-        margin: { left: 14, right: 14 },
-      });
-
-      // ---- Detections Table ----
-      const tableY = doc.lastAutoTable.finalY + 12;
-      doc.setFontSize(14);
-      doc.setTextColor(30, 41, 59);
-      doc.text('Detection Details', 14, tableY);
-
-      const tableData = detections.map((det, i) => {
-        const conf = Math.round((det.confidence || 0) * 100) + '%';
-        const violation = det.violation || 'None (Legal)';
-        let status = 'Unknown';
-        if (det.vehicle_info) {
-          status = det.vehicle_info.registered ? 'Registered' : 'Unregistered';
-        } else if (det.vehicle_registered !== undefined) {
-          status = det.vehicle_registered ? 'Registered' : 'Unregistered';
-        }
-        const timestamp = det.timestamp
-          ? new Date(det.timestamp).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-          : 'N/A';
-        return [
-          i + 1,
-          det.detected_plate || 'N/A',
-          det.correct_plate || det.detected_plate || 'N/A',
-          violation,
-          status,
-          conf,
-          timestamp
-        ];
-      });
-
-      doc.autoTable({
-        startY: tableY + 4,
-        head: [['#', 'Detected Plate', 'Corrected Plate', 'Violation', 'Status', 'Confidence', 'Time']],
-        body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontSize: 8, halign: 'center' },
-        bodyStyles: { fontSize: 8, valign: 'middle' },
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 8 },
-          1: { fontStyle: 'bold', cellWidth: 28 },
-          2: { cellWidth: 28 },
-          3: { cellWidth: 32 },
-          4: { halign: 'center', cellWidth: 22 },
-          5: { halign: 'center', cellWidth: 18 },
-          6: { cellWidth: 30 }
-        },
-        margin: { left: 14, right: 14 },
-        didParseCell: function(data) {
-          // Color violation cells
-          if (data.section === 'body' && data.column.index === 3) {
-            const val = data.cell.raw;
-            if (val && val !== 'None (Legal)') {
-              data.cell.styles.textColor = [220, 38, 38]; // Red
-              data.cell.styles.fontStyle = 'bold';
-            } else {
-              data.cell.styles.textColor = [34, 197, 94]; // Green
-            }
-          }
-          // Color status cells
-          if (data.section === 'body' && data.column.index === 4) {
-            const val = data.cell.raw;
-            if (val === 'Unregistered') {
-              data.cell.styles.textColor = [220, 38, 38];
-            } else if (val === 'Registered') {
-              data.cell.styles.textColor = [34, 197, 94];
-            }
-          }
-        }
-      });
-
-      // ---- Footer on each page ----
-      const totalPages = doc.internal.getNumberOfPages();
-      for (let p = 1; p <= totalPages; p++) {
-        doc.setPage(p);
-        doc.setFontSize(8);
-        doc.setTextColor(148, 163, 184);
-        doc.text(
-          `RoadVision Report — Page ${p} of ${totalPages}`,
-          pageWidth / 2, pageHeight - 8,
-          { align: 'center' }
-        );
+      function addPageHeader(doc, pageLabel) {
+        doc.setFillColor(...C.navy);
+        doc.rect(0, 0, PW, 16, 'F');
+        doc.setFillColor(...C.brand);
+        doc.rect(0, 14, PW, 2, 'F');
+        doc.setFontSize(9); doc.setTextColor(...C.brand);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RoadVision', 10, 10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...C.muted);
+        doc.setFontSize(7);
+        doc.text('ANPR Security Detection Report', 10, 13.5);
+        doc.setFontSize(7);
+        doc.text(pageLabel, PW - 10, 10, { align: 'right' });
+        doc.text(`${dateStr} ${timeStr}`, PW - 10, 13.5, { align: 'right' });
       }
 
-      // Save the PDF
-      const filename = `RoadVision_Report_${now.toISOString().slice(0, 10)}.pdf`;
+      function addPageFooter(doc) {
+        const pg = doc.internal.getCurrentPageInfo().pageNumber;
+        const total = doc.internal.getNumberOfPages();
+        doc.setFillColor(...C.light);
+        doc.rect(0, PH - 10, PW, 10, 'F');
+        doc.setFontSize(7); doc.setTextColor(...C.muted);
+        doc.text('Generated by RoadVision ANPR Monitoring System — Law Enforcement Use Only', PW / 2, PH - 4, { align: 'center' });
+        doc.text(`Page ${pg} of ${total}`, PW - 10, PH - 4, { align: 'right' });
+      }
+
+      function sectionTitle(doc, y, label) {
+        doc.setFillColor(...C.brand);
+        doc.rect(10, y, 3, 6, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10); doc.setTextColor(...C.dark);
+        doc.text(label, 15, y + 4.5);
+        return y + 9;
+      }
+
+      function drawProgressBar(doc, x, y, w, h, pct, color) {
+        doc.setFillColor(...C.border);
+        doc.roundedRect(x, y, w, h, 1, 1, 'F');
+        if (pct > 0) {
+          doc.setFillColor(...color);
+          doc.roundedRect(x, y, w * pct, h, 1, 1, 'F');
+        }
+      }
+
+      function violationAnalysis(det) {
+        const v = det.violation || '';
+        const plate = det.detected_plate || 'Unknown';
+        const corrected = det.correct_plate || '';
+        if (v.includes('Character Manipulation') || v.includes('Non-Standard Font / Character Manipulation')) {
+          return `Plate "${plate}" was flagged because one or more characters appear to have been deliberately substituted to evade ANPR recognition. ${corrected ? `The system reconstructed the plate as "${corrected}".` : ''} Common manipulation: replacing letters with visually similar numbers (O→0, I→1, B→8) or vice versa.`;
+        }
+        if (v.includes('Non-Standard Font')) {
+          return `Plate "${plate}" uses a non-standard typeface that does not conform to HSRP-mandated Charles Wright font regulations. Fancy, italic, or decorative fonts on number plates are illegal under MV Act provisions.`;
+        }
+        if (v.includes('Tampered')) {
+          return `Plate "${plate}" shows signs of physical tampering or deliberate character alteration. Multiple character inconsistencies were detected simultaneously, indicating intentional modification to obscure the vehicle's registered identity.`;
+        }
+        if (v.includes('Spacing Manipulation')) {
+          return `Plate "${plate}" contains unusual spacing between character groups that deviates from standard MV Act formatting. This technique is used to confuse ANPR systems and manual verification by disrupting the standard AA-NN-AA-NNNN structure.`;
+        }
+        if (v.includes('Pattern Mismatch')) {
+          return `Plate "${plate}" does not conform to the standard Indian vehicle registration format (State Code + District Code + Series + Number). This may indicate an unregistered, forged, or foreign-registered vehicle.`;
+        }
+        if (v.includes('Unregistered')) {
+          return `Plate "${plate}" was cross-referenced against the vehicle registry database and returned no valid registration record. The vehicle may be unregistered, or the plate may not accurately represent the vehicle's actual registration.`;
+        }
+        if (v.includes('Invalid State Code')) {
+          return `The state code in plate "${plate}" does not correspond to any valid Indian RTO state or UT code. This suggests the plate may be forged, belong to a different country's format, or have been tampered with.`;
+        }
+        return `Plate "${plate}" was flagged during automated detection. Further manual verification is recommended.`;
+      }
+
+      function riskScore(det) {
+        let score = 0;
+        const v = det.violation || '';
+        // Violation severity weight (0-50)
+        if (v.includes('Tampered'))         score += 50;
+        else if (v.includes('Character'))   score += 40;
+        else if (v.includes('Non-Standard')) score += 35;
+        else if (v.includes('Spacing'))     score += 30;
+        else if (v.includes('Unregistered')) score += 45;
+        else if (v.includes('Pattern'))     score += 25;
+        else if (v.includes('Invalid'))     score += 20;
+        // Registration weight (0-30)
+        const isReg = det.vehicle_info?.registered || det.vehicle_registered;
+        if (!isReg) score += 30;
+        // Confidence inverse weight (0-20): low confidence = risky
+        const conf = det.confidence || 0;
+        score += Math.round((1 - conf) * 20);
+        score = Math.min(100, score);
+        let label, color;
+        if (score >= 70)      { label = 'HIGH';   color = C.red;    }
+        else if (score >= 40) { label = 'MEDIUM'; color = C.orange; }
+        else if (score >= 10) { label = 'LOW';    color = C.yellow; }
+        else                  { label = 'NONE';   color = C.green;  }
+        return { score, label, color };
+      }
+
+      // ═══════════════════════════════════════════════════════════
+      //  PAGE 1 — Cover / Master Summary
+      // ═══════════════════════════════════════════════════════════
+      addPageHeader(doc, 'COVER PAGE');
+
+      // Title block
+      doc.setFillColor(...C.navy);
+      doc.rect(0, 18, PW, 52, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22); doc.setTextColor(...C.brand);
+      doc.text('RoadVision', PW / 2, 38, { align: 'center' });
+      doc.setFontSize(13); doc.setTextColor(...C.white);
+      doc.text('ANPR Security Detection Report', PW / 2, 47, { align: 'center' });
+      doc.setFontSize(8); doc.setTextColor(...C.muted);
+      doc.text(`Generated: ${dateStr} at ${timeStr}`, PW / 2, 54, { align: 'center' });
+      doc.text(`Total Incidents: ${detections.length}`, PW / 2, 59, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7); doc.setTextColor(...C.muted);
+      doc.text('CONFIDENTIAL — FOR LAW ENFORCEMENT USE ONLY', PW / 2, 65, { align: 'center' });
+
+      // Master summary stats
+      const violations  = detections.filter(d => d.violation).length;
+      const legal       = detections.length - violations;
+      const registered  = detections.filter(d => d.vehicle_info?.registered || d.vehicle_registered).length;
+      const avgConf     = detections.reduce((s, d) => s + (d.confidence || 0), 0) / detections.length;
+
+      let y = 82;
+      y = sectionTitle(doc, y, 'INCIDENT SUMMARY');
+
+      doc.autoTable({
+        startY: y,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Total Records Exported', detections.length],
+          ['Violations Detected',    violations],
+          ['Legal / No Violation',   legal],
+          ['Registered Vehicles',    registered],
+          ['Unregistered Vehicles',  detections.length - registered],
+          ['Average Detection Confidence', Math.round(avgConf * 100) + '%'],
+          ['Report Generated By',    'RoadVision ANPR Monitoring System v2.0'],
+          ['Detection Model',        'YOLOv8 License Plate Detector'],
+          ['Recognition Method',     'PaddleOCR + Indian RTO Format Validation'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: C.brandDk, textColor: 255, fontSize: 8, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 80 }, 1: { cellWidth: 100 } },
+        margin: { left: 10, right: 10 },
+      });
+
+      // Violation breakdown table
+      y = doc.lastAutoTable.finalY + 10;
+      y = sectionTitle(doc, y, 'VIOLATION BREAKDOWN');
+      const violTypes = {};
+      detections.forEach(d => {
+        const vt = d.violation || 'None (Legal)';
+        violTypes[vt] = (violTypes[vt] || 0) + 1;
+      });
+      const vtRows = Object.entries(violTypes).map(([type, count]) => [type, count, ((count / detections.length) * 100).toFixed(1) + '%']);
+      doc.autoTable({
+        startY: y,
+        head: [['Violation Type', 'Count', 'Percentage']],
+        body: vtRows,
+        theme: 'striped',
+        headStyles: { fillColor: C.brandDk, textColor: 255, fontSize: 8 },
+        bodyStyles: { fontSize: 8 },
+        margin: { left: 10, right: 10 },
+        didParseCell(data) {
+          if (data.section === 'body' && data.column.index === 0) {
+            const v = data.cell.raw;
+            data.cell.styles.textColor = v === 'None (Legal)' ? C.green : C.red;
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      });
+
+      // Incident index
+      y = doc.lastAutoTable.finalY + 10;
+      if (y > PH - 50) { doc.addPage(); addPageHeader(doc, 'INCIDENT INDEX'); y = 22; }
+      y = sectionTitle(doc, y, 'INCIDENT INDEX');
+      const indexRows = detections.map((det, i) => [
+        `INC-${String(i + 1).padStart(3, '0')}`,
+        det.detected_plate || 'N/A',
+        det.violation || 'None (Legal)',
+        det.vehicle_info?.registered || det.vehicle_registered ? 'Registered' : 'Unregistered',
+        Math.round((det.confidence || 0) * 100) + '%',
+        `Page ${i + 3}`
+      ]);
+      doc.autoTable({
+        startY: y,
+        head: [['Incident ID', 'Plate', 'Violation', 'Status', 'Conf.', 'Page Ref']],
+        body: indexRows,
+        theme: 'striped',
+        headStyles: { fillColor: C.brandDk, textColor: 255, fontSize: 8 },
+        bodyStyles: { fontSize: 8 },
+        margin: { left: 10, right: 10 },
+        didParseCell(data) {
+          if (data.section === 'body' && data.column.index === 2) {
+            data.cell.styles.textColor = data.cell.raw === 'None (Legal)' ? C.green : C.red;
+            data.cell.styles.fontStyle = 'bold';
+          }
+          if (data.section === 'body' && data.column.index === 3) {
+            data.cell.styles.textColor = data.cell.raw === 'Registered' ? C.green : C.red;
+          }
+        }
+      });
+
+      addPageFooter(doc);
+
+      // ═══════════════════════════════════════════════════════════
+      //  PAGES 3+N — One Incident Per Page
+      // ═══════════════════════════════════════════════════════════
+      detections.forEach((det, idx) => {
+        doc.addPage();
+        const incId = `INC-${String(idx + 1).padStart(3, '0')}`;
+        addPageHeader(doc, `INCIDENT ${incId}`);
+
+        let y = 22;
+
+        // ── Incident ID banner ──────────────────────────────────
+        doc.setFillColor(...C.dark);
+        doc.rect(10, y, PW - 20, 10, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10); doc.setTextColor(...C.brand);
+        doc.text(incId, 14, y + 7);
+        doc.setFontSize(8); doc.setTextColor(...C.white);
+        doc.text(`Detected Plate: ${det.detected_plate || 'N/A'}`, 50, y + 4);
+        doc.setFontSize(7); doc.setTextColor(...C.muted);
+        const ts = det.timestamp ? new Date(det.timestamp).toLocaleString('en-IN') : 'N/A';
+        doc.text(`Time: ${ts}`, 50, y + 8.5);
+        const risk = riskScore(det);
+        doc.setFillColor(...risk.color);
+        doc.roundedRect(PW - 42, y + 1.5, 30, 7, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7); doc.setTextColor(...C.white);
+        doc.text(`RISK: ${risk.label} (${risk.score})`, PW - 27, y + 6, { align: 'center' });
+
+        y += 15;
+
+        // ── 2. Incident Summary Table ───────────────────────────
+        y = sectionTitle(doc, y, '1. INCIDENT SUMMARY');
+        const isReg = det.vehicle_info?.registered || det.vehicle_registered;
+        const vStatus = isReg ? 'Registered' : 'Unregistered';
+        const vType   = det.vehicle_info?.vehicle_type || det.vehicle_type || 'N/A';
+        const owner   = det.vehicle_info?.owner_name || 'N/A';
+
+        doc.autoTable({
+          startY: y,
+          body: [
+            ['Detected Plate',   det.detected_plate || 'N/A',  'Frame No.',     `Frame ${det.frame ?? 'N/A'}`],
+            ['Corrected Plate',  det.correct_plate || '— (No correction needed)', 'Timestamp', ts],
+            ['Violation Type',   det.violation || 'None (Legal)',  'Vehicle Type',  vType],
+            ['Vehicle Status',   vStatus,                          'Owner',         owner],
+          ],
+          theme: 'grid',
+          bodyStyles: { fontSize: 8, valign: 'middle' },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 38, fillColor: C.light, textColor: C.dark },
+            1: { cellWidth: 62 },
+            2: { fontStyle: 'bold', cellWidth: 32, fillColor: C.light, textColor: C.dark },
+            3: { cellWidth: 58 },
+          },
+          margin: { left: 10, right: 10 },
+          didParseCell(data) {
+            if (data.section === 'body' && data.column.index === 1 && data.row.index === 2) {
+              const v = data.cell.raw;
+              data.cell.styles.textColor = v === 'None (Legal)' ? C.green : C.red;
+              data.cell.styles.fontStyle = 'bold';
+            }
+            if (data.section === 'body' && data.column.index === 1 && data.row.index === 3) {
+              data.cell.styles.textColor = vStatus === 'Registered' ? C.green : C.red;
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        });
+        y = doc.lastAutoTable.finalY + 6;
+
+        // ── 3. Detection Evidence ───────────────────────────────
+        y = sectionTitle(doc, y, '2. DETECTION EVIDENCE');
+        if (det.plate_image && det.plate_image.startsWith('data:image')) {
+          try {
+            const imgW = 60, imgH = 20;
+            doc.addImage(det.plate_image, 'JPEG', 10, y, imgW, imgH);
+            doc.setDrawColor(...C.brand);
+            doc.setLineWidth(0.5);
+            doc.rect(10, y, imgW, imgH);
+            doc.setFontSize(7); doc.setTextColor(...C.muted);
+            doc.text('Captured Plate Crop', 10, y + imgH + 4);
+            doc.setFont('helvetica', 'italic');
+            doc.text('Bounding box region extracted by YOLOv8 detector', 10, y + imgH + 8);
+            doc.setFont('helvetica', 'normal');
+            y += imgH + 14;
+          } catch(e) {
+            doc.setFontSize(8); doc.setTextColor(...C.muted);
+            doc.text('[Evidence image unavailable — capture may not have been saved]', 10, y + 6);
+            y += 12;
+          }
+        } else {
+          doc.setFontSize(8); doc.setTextColor(...C.muted);
+          doc.text('[No evidence image captured for this detection]', 10, y + 6);
+          y += 12;
+        }
+
+        // ── 4. Violation Analysis ───────────────────────────────
+        y = sectionTitle(doc, y, '3. VIOLATION ANALYSIS');
+        const explanation = violationAnalysis(det);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8); doc.setTextColor(...C.dark);
+        const lines = doc.splitTextToSize(explanation, PW - 20);
+        doc.text(lines, 10, y);
+        y += lines.length * 4.5 + 4;
+
+        // ── 5. Vehicle Registration Check ───────────────────────
+        y = sectionTitle(doc, y, '4. VEHICLE REGISTRATION CHECK');
+        if (isReg) { doc.setFillColor(220, 252, 231); } else { doc.setFillColor(254, 226, 226); }
+        doc.roundedRect(10, y, PW - 20, 14, 2, 2, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9); doc.setTextColor(...(isReg ? C.green : C.red));
+        doc.text(isReg ? '✓ REGISTERED' : '✗ NOT REGISTERED', 16, y + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8); doc.setTextColor(...C.dark);
+        if (isReg) {
+          doc.text(`Owner: ${owner}  |  Type: ${vType}  |  Plate matches registry record`, 16, y + 11);
+        } else {
+          doc.text('No matching record found in the vehicle registration database.', 16, y + 11);
+        }
+        y += 20;
+
+        // ── 6. Confidence Visualization ─────────────────────────
+        y = sectionTitle(doc, y, '5. DETECTION CONFIDENCE');
+        const conf = det.confidence || 0;
+        const confPct = Math.round(conf * 100);
+        const barColor = confPct >= 80 ? C.green : confPct >= 50 ? C.orange : C.red;
+        doc.setFontSize(8); doc.setTextColor(...C.dark);
+        doc.text(`OCR Confidence: ${confPct}%`, 10, y + 3);
+        drawProgressBar(doc, 10, y + 6, PW - 20, 5, conf, barColor);
+        doc.setFontSize(7); doc.setTextColor(...C.muted);
+        doc.text('0%', 10, y + 15);
+        doc.text('50%', PW / 2, y + 15, { align: 'center' });
+        doc.text('100%', PW - 10, y + 15, { align: 'right' });
+        y += 22;
+
+        // ── 7. Risk Assessment ──────────────────────────────────
+        y = sectionTitle(doc, y, '6. RISK ASSESSMENT');
+        doc.autoTable({
+          startY: y,
+          body: [
+            ['Risk Score',          `${risk.score} / 100`],
+            ['Risk Level',          risk.label],
+            ['Violation Severity',  det.violation ? 'High' : 'None'],
+            ['Registration Factor', isReg ? 'Registered (Low Risk)' : 'Unregistered (High Risk)'],
+            ['Confidence Factor',   confPct >= 70 ? 'High confidence detection' : confPct >= 45 ? 'Medium confidence — verify manually' : 'Low confidence — manual review required'],
+          ],
+          theme: 'grid',
+          bodyStyles: { fontSize: 8, valign: 'middle' },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 55, fillColor: C.light, textColor: C.dark },
+            1: { cellWidth: 135 },
+          },
+          margin: { left: 10, right: 10 },
+          didParseCell(data) {
+            if (data.section === 'body' && data.column.index === 1 && data.row.index === 1) {
+              data.cell.styles.textColor = risk.color;
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        });
+        y = doc.lastAutoTable.finalY + 6;
+
+        // ── 8. Technical Details ────────────────────────────────
+        y = sectionTitle(doc, y, '7. TECHNICAL DETAILS');
+        doc.autoTable({
+          startY: y,
+          body: [
+            ['Detection Model',       'YOLOv8 License Plate Detector (license_plate_detector.pt)'],
+            ['Input Resolution',      '320×320 px (speed-optimized mode)'],
+            ['Recognition Method',    'PaddleOCR with Indian RTO Format Validation'],
+            ['Validation Rules',      'Character Manipulation · Spacing · Pattern Match · Font Analysis'],
+            ['Frame Processed',       `Frame ${det.frame ?? 'N/A'}`],
+            ['Bounding Box',          det.bbox ? `[x:${det.bbox[0]}%, y:${det.bbox[1]}%, w:${det.bbox[2]}%, h:${det.bbox[3]}%]` : 'N/A'],
+          ],
+          theme: 'grid',
+          bodyStyles: { fontSize: 7.5, valign: 'middle' },
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 50, fillColor: C.light, textColor: C.dark },
+            1: { cellWidth: 140 },
+          },
+          margin: { left: 10, right: 10 },
+        });
+
+        addPageFooter(doc);
+      });
+
+      // Update all footer page counts now that we know total pages
+      const total = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= total; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7); doc.setTextColor(...C.muted);
+        doc.text(`Page ${p} of ${total}`, PW - 10, PH - 4, { align: 'right' });
+      }
+
+      const filename = `RoadVision_Incident_Report_${now.toISOString().slice(0,10)}.pdf`;
       doc.save(filename);
     }
   </script>

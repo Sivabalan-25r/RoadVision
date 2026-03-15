@@ -5,12 +5,13 @@
  * Update API_BASE_URL for production deployment.
  */
 
-const RoadVisionConfig = {
+if (typeof RoadVisionConfig === 'undefined') {
+var RoadVisionConfig = {
     // API Configuration
     // For local development: 'http://localhost:8000'
     // For production: update to your deployed backend URL (e.g., 'https://api.roadvision.com')
     API_BASE_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:8000'
+        ? 'http://localhost:8001'
         : window.location.origin,
 
     // API Endpoints
@@ -37,3 +38,4 @@ RoadVisionConfig.getApiUrl = function (endpoint) {
 
 // Make config globally available
 window.RoadVisionConfig = RoadVisionConfig;
+} // end if (typeof RoadVisionConfig === 'undefined')

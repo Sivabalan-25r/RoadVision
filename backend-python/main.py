@@ -8,7 +8,7 @@ validates plate formats against Indian RTO rules, and returns structured
 detection results.
 
 Run with: uvicorn main:app --reload
-API docs: http://localhost:8000/docs
+API docs: http://localhost:8001/docs
 """
 
 import logging
@@ -175,8 +175,8 @@ async def startup_check():
         logger.info("  ✓ OCR Pipeline:    Ready (with fallback support)")
 
     logger.info("=" * 60)
-    logger.info("Ready at: http://localhost:8000")
-    logger.info("API docs: http://localhost:8000/docs")
+    logger.info("Ready at: http://localhost:8001")
+    logger.info("API docs: http://localhost:8001/docs")
     logger.info("=" * 60)
 
 
@@ -221,9 +221,9 @@ async def analyze_video(video: UploadFile = File(...)):
         temp_path = save_upload_to_temp(file_bytes, suffix=ext)
         logger.info(f"Saved to temp: {temp_path} ({len(file_bytes)} bytes)")
 
-        # Step 1: Process video frames — every 5th frame
+        # Step 1: Process video frames — every 3rd frame (more sampling = better stabilization)
         logger.info("Starting YOLO + PaddleOCR pipeline...")
-        raw_detections = process_video(temp_path, frame_interval=5)
+        raw_detections = process_video(temp_path, frame_interval=3)
         logger.info(f"Raw plate detections from YOLO: {len(raw_detections)}")
 
         if not raw_detections:
@@ -249,7 +249,7 @@ async def analyze_video(video: UploadFile = File(...)):
                 continue
 
             # Validate against Indian RTO rules
-            validation = validate_plate(plate_text)
+            validation = validate_plate(plate_text, det.get('raw_crop'))
 
             logger.info(
                 f"Detection {idx}: '{validation.detected_plate}' → "
@@ -268,7 +268,9 @@ async def analyze_video(video: UploadFile = File(...)):
             # This applies even to unregistered vehicles, as long as the format is correct
             format_boost = 1.0
             from rules.plate_rules import PLATE_PATTERN
-            if PLATE_PATTERN.match(validation.correct_plate):
+            # Use detected_plate as fallback if correct_plate is None (legal plates)
+            plate_for_format_check = validation.correct_plate or validation.detected_plate
+            if PLATE_PATTERN.match(plate_for_format_check):
                 # Matches Indian RTO format - apply boost
                 format_boost = 1.15
             
@@ -281,38 +283,61 @@ async def analyze_video(video: UploadFile = File(...)):
                 )
             )
 
+            # Encode plate crop image as base64 for frontend evidence display
+            plate_image_b64 = None
+            try:
+                if det.get('raw_crop') is not None and det['raw_crop'].size > 0:
+                    import base64
+                    _, buf = cv2.imencode('.jpg', det['raw_crop'], [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    plate_image_b64 = 'data:image/jpeg;base64,' + base64.b64encode(buf).decode('utf-8')
+            except Exception as enc_err:
+                logger.warning(f"Could not encode plate crop: {enc_err}")
+
             detection_entry = {
                 "detected_plate": validation.detected_plate,
                 "correct_plate": validation.correct_plate,
                 "violation": validation.violation,
+                "font_anomaly": validation.font_anomaly,
                 "confidence": combined_conf,
                 "frame": det['frame_number'],
                 "bbox": det['bbox'],  # [x, y, width, height]
+                "plate_image": plate_image_b64,  # base64 JPEG crop for evidence
+                "source": "video_analysis",
             }
             
             # Add vehicle registration info if available
             if validation.vehicle_info:
                 detection_entry["vehicle_info"] = validation.vehicle_info
 
+
             # Group by normalized plate text for aggregation
             if normalized not in plate_detections:
                 plate_detections[normalized] = []
             plate_detections[normalized].append(detection_entry)
 
-        # Step 3: Frame-level aggregation with fuzzy matching
-        # Group similar plates together using Levenshtein distance
+        # Step 3: Stabilization + Frame-level aggregation with fuzzy matching
+        # Only keep plates seen in ≥2 frames (stabilization from Deep Dive doc)
+        # Then group similar plates using Levenshtein distance
+        MIN_FRAMES_REQUIRED = 2  # Plate must appear in at least 2 frames to be real
         detections: List[dict] = []
         processed_plates = set()
         
         for normalized_plate, detection_list in plate_detections.items():
+            # ── Stabilization: reject plates seen in only 1 frame ──
+            if len(detection_list) < MIN_FRAMES_REQUIRED:
+                logger.debug(
+                    f"Stabilization: skipping '{normalized_plate}' — only seen in "
+                    f"{len(detection_list)} frame(s), need {MIN_FRAMES_REQUIRED}+"
+                )
+                continue
+
             # Check if this plate is similar to any already processed plate
             is_duplicate = False
             for processed in processed_plates:
                 # Calculate Levenshtein distance
                 distance = _levenshtein_distance(normalized_plate, processed)
-                # If plates are similar (≤3 char difference), consider it a duplicate
-                # This catches OCR variants like TN57ADJ80 vs TN57AD3604
-                if distance <= 3 and abs(len(normalized_plate) - len(processed)) <= 3:
+                # Tighter distance (≤2) to avoid false merges
+                if distance <= 2 and abs(len(normalized_plate) - len(processed)) <= 2:
                     logger.debug(f"Skipping duplicate: '{normalized_plate}' ≈ '{processed}' (distance: {distance})")
                     is_duplicate = True
                     break
@@ -320,11 +345,26 @@ async def analyze_video(video: UploadFile = File(...)):
             if not is_duplicate:
                 # Select the detection with highest confidence
                 best_detection = max(detection_list, key=lambda d: d['confidence'])
+                
+                # ── Confidence boost for multi-frame stability ──
+                # More frames seen = more confident the plate is real
+                frames_seen = len(detection_list)
+                base_confidence = float(best_detection.get('confidence', 0.5))
+                stability_boost = min(1.0, base_confidence + (frames_seen - 1) * 0.05)
+                best_detection['confidence'] = float(round(stability_boost, 2))
+                best_detection['frames_seen'] = frames_seen  # Include for frontend display
+                
                 detections.append(best_detection)
                 processed_plates.add(normalized_plate)
+
+                # Save the final stabilized + deduplicated detection to DB
+                try:
+                    db.add_detection('CAM-001', best_detection)
+                except Exception as db_err:
+                    logger.warning(f"DB save failed for stabilized video detection: {db_err}")
                 
                 logger.debug(
-                    f"Plate '{normalized_plate}': aggregated {len(detection_list)} detections, "
+                    f"Plate '{normalized_plate}': seen in {frames_seen} frames, "
                     f"selected frame {best_detection['frame']} with confidence {best_detection['confidence']}"
                 )
 
@@ -333,7 +373,7 @@ async def analyze_video(video: UploadFile = File(...)):
 
         logger.info(
             f"Final results: {len(detections)} unique detections "
-            f"(after fuzzy deduplication), "
+            f"(after stabilization + fuzzy dedup), "
             f"{sum(1 for d in detections if d['violation'])} violations"
         )
 
@@ -483,12 +523,71 @@ async def clear_detections(camera_id: str):
     return JSONResponse(content={"message": "All detections cleared"})
 
 
+
+# ---- Stabilization Tracker (from RoadVision Deep Dive) ----
+# "Do not log a plate the first millisecond you see it. Wait for at least
+# 2-3 frames of consistent readings to ensure the OCR has settled."
+import time as _time
+
+_plate_tracker: dict = {}  # normalized_plate -> {count, best_conf, best_entry, last_seen, saved}
+STABILIZATION_FRAMES = 2   # Require N consistent frame readings before confirming
+TRACKER_EXPIRY_SEC = 30    # Expire stale tracker entries after 30s
+
+
+def _stabilize_detection(normalized_plate: str, result_entry: dict, camera_id: str) -> bool:
+    """
+    Track a plate across frames. Returns True when the plate is confirmed
+    (seen in ≥ STABILIZATION_FRAMES frames) and should be sent to client.
+    Saves to DB only on first confirmation.
+    """
+    global _plate_tracker
+    now = _time.time()
+
+    # Expire stale entries
+    stale = [k for k, v in _plate_tracker.items() if now - v['last_seen'] > TRACKER_EXPIRY_SEC]
+    for k in stale:
+        del _plate_tracker[k]
+
+    if normalized_plate in _plate_tracker:
+        entry = _plate_tracker[normalized_plate]
+        entry['count'] += 1
+        entry['last_seen'] = now
+        # Keep highest confidence reading
+        if result_entry.get('confidence', 0) > entry['best_conf']:
+            entry['best_conf'] = result_entry.get('confidence', 0)
+            entry['best_entry'] = result_entry
+
+        if entry['count'] >= STABILIZATION_FRAMES and not entry['saved']:
+            # Plate confirmed — save to DB once
+            entry['saved'] = True
+            try:
+                db.add_detection(camera_id or 'CAM-001', entry['best_entry'])
+                logger.info(f"  ✓ Stabilized plate '{normalized_plate}' after {entry['count']} frames — saved to DB")
+            except Exception as db_err:
+                logger.warning(f"DB save failed for stabilized detection: {db_err}")
+            return True
+        elif entry['count'] >= STABILIZATION_FRAMES:
+            return True  # Already saved, still show on frontend
+        else:
+            return False  # Not yet confirmed
+    else:
+        _plate_tracker[normalized_plate] = {
+            'count': 1,
+            'best_conf': result_entry.get('confidence', 0),
+            'best_entry': result_entry,
+            'last_seen': now,
+            'saved': False,
+        }
+        return False  # First sighting — don't show yet
+
+
 # ---- Live Camera Stream Processing ----
 @app.post("/api/process-frame")
 async def process_camera_frame(
     file: UploadFile = File(...),
     original_width: int = Form(0),
-    original_height: int = Form(0)
+    original_height: int = Form(0),
+    camera_id: Optional[str] = Form(default='CAM-001')
 ):
     """
     Process a single camera frame and return YOLO detections with bounding boxes.
@@ -574,7 +673,8 @@ async def process_camera_frame(
             
             if plate_text:
                 # Validate the plate
-                validation = validate_plate(plate_text)
+                from rules.plate_rules import validate_plate, normalize_plate as _norm_plate
+                validation = validate_plate(plate_text, det['raw_crop'])
                 
                 logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
                 
@@ -582,6 +682,7 @@ async def process_camera_frame(
                     "detected_plate": validation.detected_plate,
                     "correct_plate": validation.correct_plate,
                     "violation": validation.violation,
+                    "font_anomaly": validation.font_anomaly,
                     "confidence": min(1.0, round(det['confidence'], 2)),
                     "bbox": [
                         round(x_pct, 1),
@@ -595,8 +696,29 @@ async def process_camera_frame(
                 # Add vehicle registration info if available
                 if validation.vehicle_info:
                     result_entry["vehicle_info"] = validation.vehicle_info
-                
-                results.append(result_entry)
+
+                # ── Stabilization: require 2+ consistent frame readings ──
+                normalized = _norm_plate(validation.detected_plate)
+                is_confirmed = _stabilize_detection(normalized, result_entry, camera_id)
+
+                if is_confirmed:
+                    # Plate confirmed across multiple frames — show with full data
+                    results.append(result_entry)
+                else:
+                    # First sighting — show bbox + "Detecting..." until confirmed
+                    results.append({
+                        "detected_plate": "Detecting...",
+                        "correct_plate": None,
+                        "violation": None,
+                        "confidence": min(1.0, round(det['confidence'], 2)),
+                        "bbox": [
+                            round(x_pct, 1),
+                            round(y_pct, 1),
+                            round(w_pct, 1),
+                            round(h_pct, 1)
+                        ],
+                        "plate_image": plate_image_data_url
+                    })
             else:
                 # No OCR text, just show the detection
                 logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")

@@ -201,7 +201,6 @@
   </div>
 
   <!-- Scripts loaded once at the bottom -->
-  <script src="config.js"></script>
   <script src="api-client.js"></script>
   <script src="components/loader.js"></script>
   <script src="components/evidence-store.js"></script>
@@ -657,6 +656,9 @@
         formData.append('file', blob, 'frame.jpg');
         formData.append('original_width', originalWidth.toString());
         formData.append('original_height', originalHeight.toString());
+        // Pass camera_id so backend saves detection under correct camera
+        const camId = (window.RoadVisionAPI && RoadVisionAPI.getCurrentCameraId) ? RoadVisionAPI.getCurrentCameraId() : 'CAM-001';
+        formData.append('camera_id', camId);
 
         console.log('Sending frame to backend with original dimensions...');
         const res = await fetch(RoadVisionConfig.getApiUrl('PROCESS_FRAME'), {
