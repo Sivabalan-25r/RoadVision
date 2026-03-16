@@ -116,13 +116,13 @@ async def startup_check():
     # ---- Load YOLO plate detector (REQUIRED) ----
     try:
         load_plate_model()
-        logger.info(f"  ✓ Plate detector:  {detector_path}")
+        # Model details are logged by load_plate_model()
     except FileNotFoundError as e:
         logger.error(f"  ✗ FATAL: {e}")
         logger.error("=" * 60)
         raise RuntimeError(
             f"License plate detector model not found at: {detector_path}\n"
-            f"Place 'license_plate_detector.pt' (from keremberke/yolov8-license-plate) "
+            f"Place 'license_plate_detector.pt' (YOLOv26 trained on license plates) "
             f"in backend-python/models/ and restart the server."
         )
 

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\_inductor\cudagraph_utils.py
+# hypothesis_version: 6.151.6
+
+['cpu', 'cuda', 'cudagraph_skips', 'inductor', 'meta', 'mutated inputs', 'perf_hints', 'placeholder', 'stack_trace']

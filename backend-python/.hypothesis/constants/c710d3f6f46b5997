@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\core\add.py
+# hypothesis_version: 6.151.6
+
+['add', 'basic', 'deep', 'factor', 'force', 'kind', 'log', 'logx', 'mul', 'multinomial', 'oo', 'power_base', 'power_exp']

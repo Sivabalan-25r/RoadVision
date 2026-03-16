@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\_numpy\_funcs.py
+# hypothesis_version: 6.151.6
+
+['_', 'einsum', 'index_exp', 'median', 'percentile', 'quantile', 's_']

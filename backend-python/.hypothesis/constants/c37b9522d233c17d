@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\data\explorer\utils.py
+# hypothesis_version: 6.151.6
+
+[640, 'OpenAI API key: ', 'bboxes', 'cls', 'content', 'gpt-3.5-turbo', 'im_file', 'keypoints', 'labels', 'list', 'masks', 'names', 'openai>=1.6.1', 'openai_api_key', 'role', 'system', 'user']

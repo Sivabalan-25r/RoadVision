@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\printing\tableform.py
+# hypothesis_version: 6.151.6
+
+[' & ', ' \\\\', '$%s$', '%%%s%ss', '-', '0', '<', '>', '\\begin{tabular}{', '\\end{tabular}', '\\hline', '^', 'alignments', 'automatic', 'c', 'center', 'formats', 'headings', 'l', 'left', 'pad', 'r', 'right', 'wipe_zeros', '|', '}\n']

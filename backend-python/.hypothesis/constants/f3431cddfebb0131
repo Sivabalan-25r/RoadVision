@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\data\explorer\explorer.py
+# hypothesis_version: 6.151.6
+
+[0.0, 0.2, 1.0, 'Count', 'No results found.', 'SELECT', 'Similarity Count', 'WHERE', '_', 'arrow', 'batch_idx', 'coco128.yaml', 'count', 'data idx', 'duckdb<=0.9.2', 'explorer', 'idx', 'im_file', 'img', 'lancedb>=0.4.3', 'ori_shape', 'overwrite', 'pandas', 'png', 'ratio_pad', 'resized_shape', 'sim_im_files', 'train', 'vector', 'xyxy', 'yolov8n.pt']

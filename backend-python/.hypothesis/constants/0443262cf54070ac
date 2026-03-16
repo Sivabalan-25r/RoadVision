@@ -1,0 +1,4 @@
+# file: C:\Proj\RoadVision\backend-python\recognition\crnn_recognizer.py
+# hypothesis_version: 6.151.6
+
+[0.0, 0.15, 0.2, 0.25, 0.3, 0.5, 1.0, 2.0, 3.0, 3.5, 100.0, 255.0, 100, 120, 128, 200, 255, 256, 300, 512, '..', 'IND', 'INDIA', 'LOCALAPPDATA', '[^A-Z0-9]', 'conf', 'cpu', 'crnn.pth', 'en', 'greedy', 'models', 'rec_scores', 'rec_texts', 'tesseract', 'text', 'torch.Tensor', 'weights_only']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\autograd\anomaly_mode.py
+# hypothesis_version: 6.151.6
+
+['detect_anomaly', 'set_detect_anomaly']

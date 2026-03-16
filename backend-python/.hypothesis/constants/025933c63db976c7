@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\_dynamo\variables\torch_function.py
+# hypothesis_version: 6.151.6
+
+['PyCodegen', 'VariableTracker', '__class__', '__enter__', '__exit__', '__torch_function__', 'class_type', 'fget', 'torch_function_fn']

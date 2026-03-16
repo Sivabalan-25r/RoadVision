@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\nn\modules\block.py
+# hypothesis_version: 6.151.6
+
+[-10.0, -1.0, 0.0, 0.07, 0.5, 1.0, 128, 256, 512, 'ADown', 'BNContrastiveHead', 'Bottleneck', 'BottleneckCSP', 'C1', 'C2', 'C2f', 'C2fAttn', 'C3', 'C3Ghost', 'C3TR', 'C3x', 'CBFuse', 'CBLinear', 'ContrastiveHead', 'DFL', 'GhostBottleneck', 'HGBlock', 'HGStem', 'ImagePoolingAttn', 'Proto', 'RepC3', 'RepNCSPELAN4', 'ResNetLayer', 'SPP', 'SPPELAN', 'SPPF', 'Silence', 'bchw,bkc->bkhw', 'bmchw,bnmc->bmhwn', 'bmnk,bkmc->bnmc', 'bnmc,bkmc->bmnk', 'nearest']

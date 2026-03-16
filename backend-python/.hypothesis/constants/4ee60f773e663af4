@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\fastsam\prompt.py
+# hypothesis_version: 6.151.6
+
+[0.6, 0.8, 1.0, 100.0, 100, 144, 255, 960, 'L', 'RGB', 'ViT-B/32', 'area', 'b', 'bbox', 'cuda', 'id', 'ij', 'm', 'off', 'score', 'segmentation', 'tight', 'y']

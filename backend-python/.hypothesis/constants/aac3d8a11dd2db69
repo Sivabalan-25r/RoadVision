@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\distributed\fsdp\_optim_utils.py
+# hypothesis_version: 6.151.6
+
+['_device_mesh', '_use_dtensor', 'clone', 'cpu', 'param_groups', 'params', 'preprocessing', 'state', 'state_converting']

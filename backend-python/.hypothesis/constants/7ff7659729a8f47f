@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\obb\train.py
+# hypothesis_version: 6.151.6
+
+['box_loss', 'cls_loss', 'dfl_loss', 'nc', 'obb', 'task']

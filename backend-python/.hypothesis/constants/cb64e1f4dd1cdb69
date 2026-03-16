@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\pandas\io\xml.py
+# hypothesis_version: 6.151.6
+
+['*', './*', '<', '<?xml', '[1]/*', 'end', 'etree', 'getprevious', 'ignore', 'infer', 'lxml', 'lxml.etree', 'pandas', 'r', 'read', 'start', 'utf-8', '}']

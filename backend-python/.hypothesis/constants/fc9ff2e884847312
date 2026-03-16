@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\world\train.py
+# hypothesis_version: 6.151.6
+
+['/', 'ViT-B/32', 'img', 'names', 'nc', 'texts', 'train', 'txt_feats', 'val', 'yaml_file']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\data\augment.py
+# hypothesis_version: 6.151.6
+
+[0.0, 1e-16, 0.01, 0.015, 0.08, 0.1, 0.3, 0.4, 0.5, 1.0, 3.0, 4.0, 32.0, 255.0, 100, 114, 180, 224, 255, 256, 640, ', ', '1.0.3', 'Compose', 'albumentations: ', 'always_apply=False, ', 'augmix', 'autoaugment', 'batch_idx', 'bboxes', 'class_labels', 'cls', 'flip_idx', 'horizontal', 'im_file', 'image', 'img', 'instances', 'keypoints', 'kpt_shape', 'masks', 'mix_labels', 'mosaic_border', 'ori_shape', 'randaugment', 'ratio_pad', 'rect_shape', 'resized_shape', 'texts', 'vertical', 'xywh', 'xyxy', 'yolo', '{}']

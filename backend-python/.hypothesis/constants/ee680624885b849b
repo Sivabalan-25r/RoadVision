@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\segment\train.py
+# hypothesis_version: 6.151.6
+
+['batch_idx', 'bboxes', 'box_loss', 'cls', 'cls_loss', 'dfl_loss', 'im_file', 'img', 'masks', 'nc', 'seg_loss', 'segment', 'task']

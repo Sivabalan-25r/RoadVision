@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\data\converter.py
+# hypothesis_version: 6.151.6
+
+[1000, '%g ', '*.json', '../coco/annotations/', './images', '.json', '.png', '.txt', 'a', 'airport', 'annotations', 'baseball-diamond', 'basketball-court', 'bbox', 'bboxes', 'bridge', 'category_id', 'cls', 'coco_converted/', 'coco_url', 'container-crane', 'file_name', 'ground-track-field', 'harbor', 'height', 'helicopter', 'helipad', 'im_file', 'image_id', 'images', 'instances_', 'iscrowd', 'keypoints', 'labels', 'labels-segment', 'large-vehicle', 'lvis_v1_', 'plane', 'r', 'roundabout', 'sam_b.pt', 'segmentation', 'segments', 'shape', 'ship', 'small-vehicle', 'soccer-ball-field', 'storage-tank', 'swimming-pool', 'tennis-court', 'train', 'train2017', 'val', 'val2017', 'w', 'width', '{:.6g}']

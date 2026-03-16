@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\segment\val.py
+# hypothesis_version: 6.151.6
+
+[0.0, 0.5, 1.0, '%11s', '%22s', 'Box(P', 'Class', 'F', 'Images', 'Instances', 'Mask(P', 'R', 'batch_idx', 'bbox', 'bboxes', 'bilinear', 'category_id', 'cls', 'conf', 'counts', 'im_file', 'image_id', 'img', 'imgsz', 'mAP50', 'mAP50-95)', 'masks', 'ori_shape', 'path', 'pred_cls', 'predictions.json', 'pycocotools>=2.0.6', 'ratio_pad', 'score', 'segm', 'segment', 'segmentation', 'target_cls', 'tp', 'tp_m', 'uint8', 'utf-8']

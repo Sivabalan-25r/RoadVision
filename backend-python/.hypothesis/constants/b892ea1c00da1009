@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\classify\train.py
+# hypothesis_version: 6.151.6
+
+[224, '%11s', '.', '.pt', 'Epoch', 'GPU_mem', 'IMAGENET1K_V1', 'Instances', 'Size', 'classify', 'cls', 'cpu', 'fitness', 'img', 'imgsz', 'loss', 'names', 'nc', 'on_fit_epoch_end', 'reset_parameters', 'task', 'train', 'yaml', 'yml']

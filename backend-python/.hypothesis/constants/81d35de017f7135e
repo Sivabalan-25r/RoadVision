@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\engine\model.py
+# hypothesis_version: 6.151.6
+
+[0.1, 0.25, './\\', '.pt', '.yaml', '.yml', 'Model', '_', 'batch', 'benchmark', 'cfg', 'conf', 'data', 'date', 'device', 'docs', 'embed', 'export', 'grpc', 'half', 'http', 'http://', 'https://', 'hub', 'hub-sdk>=0.0.6', 'id', 'imgsz', 'int8', 'license', 'metrics', 'mode', 'mode=predict', 'mode=track', 'model', 'name', 'names', 'predict', 'predictor', 'project', 'prompts', 'rect', 'reset_parameters', 'resume', 'rtmp://', 'rtsp://', 'save', 'saved_model.pt', 'set_prompts', 'single_cls', 'task', 'tcp://', 'track', 'trackers', 'train', 'trainer', 'transforms', 'ultralytics', 'val', 'validator', 'verbose', 'version', 'yolo', 'yolov8n.pt']

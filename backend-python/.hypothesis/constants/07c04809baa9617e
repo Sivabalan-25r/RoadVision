@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\nn\autobackend.py
+# hypothesis_version: 6.151.6
+
+[255, 640, 999, 2048, '*.param', '*.pdmodel', '*.xml', '.bin', '.mlmodel', '.pdiparams', '7.0.0', 'AUTO', 'Binding', 'CPUExecutionProvider', 'Darwin', 'LATENCY', 'Linux', 'NCHW', 'PERFORMANCE_HINT', 'THROUGHPUT', 'Windows', 'batch', 'confidence', 'config.txt', 'cpu', 'cuda:0', 'data', 'dtype', 'edgetpu.dll', 'grpc', 'http', 'image', 'images', 'imgsz', 'index', 'kpt_shape', 'libedgetpu.1.dylib', 'libedgetpu.so.1', 'little', 'map', 'metadata.yaml', 'module', 'n0', 'name', 'names', 'ncnn', 'num_bindings', 'numpy==1.23.5', 'nvidia-tensorrt', 'onnx', 'onnxruntime', 'onnxruntime-gpu', 'opencv-python>=4.5.4', 'openvino>=2024.0.0', 'paddlepaddle', 'paddlepaddle-gpu', 'path/to/model.pt', 'ptr', 'quantization', 'r', 'rb', 'shape', 'stride', 'task', 'tritonclient[all]', 'uint8', 'utf-8', 'x:0', 'yolov8n.pt']

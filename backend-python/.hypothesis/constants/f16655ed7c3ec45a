@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\rtdetr\train.py
+# hypothesis_version: 6.151.6
+
+['batch_idx', 'bboxes', 'cls', 'cls_loss', 'giou_loss', 'img', 'l1_loss', 'nc', 'train', 'val']

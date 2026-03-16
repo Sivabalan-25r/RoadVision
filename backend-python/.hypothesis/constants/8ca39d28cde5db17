@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\model.py
+# hypothesis_version: 6.151.6
+
+['-world', '.pt', '.yaml', '.yml', 'classify', 'detect', 'model', 'names', 'obb', 'pose', 'predictor', 'segment', 'trainer', 'validator', 'yolov8n.pt', 'yolov8s-world.pt']

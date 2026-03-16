@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\_dynamo\variables\sdpa.py
+# hypothesis_version: 6.151.6
+
+['PyCodegen', 'SDPAParams', '_SDPAParams', 'attn_mask', 'dropout', 'enable_gqa', 'is_causal', 'key', 'query', 'torch._C', 'value']

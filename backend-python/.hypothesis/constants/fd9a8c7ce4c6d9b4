@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\datasets\clevr.py
+# hypothesis_version: 6.151.6
+
+['*', 'clevr', 'image_filename', 'images', 'objects', 'scenes', 'split', 'test', 'train', 'val']

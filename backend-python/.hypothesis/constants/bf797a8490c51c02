@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\sam\model.py
+# hypothesis_version: 6.151.6
+
+[0.25, 1024, '.pt', '.pth', 'predict', 'predictor', 'sam_b.pt', 'segment']

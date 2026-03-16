@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\utils\downloads.py
+# hypothesis_version: 6.151.6
+
+[1.0, 1.5, 100000.0, 200, 400, 1024, "'", '*', '-', '-#', '--directory', '--retry', '-C', '-cls', '-o', '-obb', '-pose', '-seg', '-spp', '-tiny', '.', '..', '.DS_Store', '.gz', '.tar', '.zip', '/', '/d/', '/view', '3', '6', ':/', '://', 'B', 'Content-Length', '__MACOSX', 'assets', 'bl', 'ce', 'content-disposition', 'curl', 'download_warning', 'file', 'filename="(.+)"', 'http:/', 'https:/', 'latest', 'lx', 'mobile_sam.pt', 'name', 'nsmlx', 'quota exceeded', 'rate limit exceeded', 'sS', 'sml', 'smlx', 'sx', 'tag_name', 'tar', 'torch', 'ultralytics/assets', 'v8.1.0', 'w', 'wb', 'weights_dir', 'xf', 'xfz']

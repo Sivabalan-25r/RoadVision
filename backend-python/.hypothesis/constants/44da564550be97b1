@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\engine\predictor.py
+# hypothesis_version: 6.151.6
+
+[0.25, 1000.0, 255, 300, 1000, '%gx%g ', '.avi', '.mp4', 'Linux', 'MJPG', 'WMV2', 'avc1', 'classify', 'crops', 'frame (\\d+)/', 'image', 'inference', 'labels', 'labels/*.txt', 'on_predict_batch_end', 'on_predict_end', 'on_predict_start', 'postprocess', 'preprocess', 'stream', 'transforms', 'video', 'video_flag']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\detect\val.py
+# hypothesis_version: 6.151.6
+
+[0.5, 0.95, 255, '%11.3g', '%11i', '%11s', '%22s', '%g ', 'AP', 'AP50', 'Box(P', 'Class', 'Images', 'Instances', 'R', 'a', 'all', 'annotations', 'batch_idx', 'bbox', 'bboxes', 'category_id', 'cls', 'coco', 'conf', 'detect', 'im_file', 'image_id', 'img', 'imgsz', 'labels', 'lvis', 'lvis>=0.5.3', 'mAP50', 'mAP50-95)', 'ori_shape', 'path', 'pred_cls', 'predictions.json', 'pycocotools', 'pycocotools>=2.0.6', 'ratio_pad', 'score', 'target_cls', 'tp', 'val']

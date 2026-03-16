@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\rtdetr\val.py
+# hypothesis_version: 6.151.6
+
+[0.0, 'RTDETRValidator', 'batch_idx', 'bbox', 'bboxes', 'cls', 'img', 'imgsz', 'ori_shape', 'ratio_pad', 'val', 'xywh']

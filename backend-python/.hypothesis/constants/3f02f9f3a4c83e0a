@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\polys\domains\gaussiandomains.py
+# hypothesis_version: 6.151.6
+
+['%s(%s, %s)', 'QQ_I', 'ZZ_I', 'divmod({}, 0)', 'x', 'y', '{} % 0', '{} / 0', '{} is not Gaussian']

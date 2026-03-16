@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\polys\domains\expressiondomain.py
+# hypothesis_version: 6.151.6
+
+['EX', 'EX(%s)', 'basic', 'deep', 'ex', 'log', 'mul', 'multinomial', 'power_base', 'power_exp']

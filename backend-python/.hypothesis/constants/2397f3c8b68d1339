@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\datasets\svhn.py
+# hypothesis_version: 6.151.6
+
+['Split: {split}', 'X', 'extra', 'extra_32x32.mat', 'split', 'test', 'test_32x32.mat', 'train', 'train_32x32.mat', 'y']

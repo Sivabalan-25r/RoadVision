@@ -10,3 +10,5 @@ easyocr>=1.7.0
 paddlepaddle-tiny
 paddleocr>=2.7.0
 pytesseract>=0.3.10
+hypothesis>=6.0.0
+pytest>=7.0.0

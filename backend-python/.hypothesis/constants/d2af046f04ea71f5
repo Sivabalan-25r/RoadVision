@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\sam\build.py
+# hypothesis_version: 6.151.6
+
+[0.0, 1e-06, 0.8, 4.0, 57.12, 57.375, 58.395, 103.53, 116.28, 123.675, 128, 160, 256, 320, 768, 1000, 1024, 1280, 2048, 'mobile_sam.pt', 'rb', 'sam_b.pt', 'sam_h.pt', 'sam_l.pt']

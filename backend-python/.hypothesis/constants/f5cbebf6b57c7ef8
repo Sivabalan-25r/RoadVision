@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\packaging\_musllinux.py
+# hypothesis_version: 6.151.6
+
+['-', 'Version (\\d+)\\.(\\d+)', '[.-]', '_', '__main__', 'linux-', 'musl', 'musl:', 'not linux', 'plat:', 'rb', 'tags:']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\utils\torch_utils.py
+# hypothesis_version: 6.151.6
+
+[0.0, 0.001, 0.03, 0.447, 0.9999, 1.0, 1000000.0, 1000000000.0, 100, 640, 1000, 2000, ' (fused)', "'", '(', '(R)', ')', ',', '-1', '0', '0.10.0', '0.11.0', '0.13.0', '1.13.0', '1.9.0', '2.0.0', ':4096:8', '@ ', 'CPU ', 'CUDA_VISIBLE_DEVICES', 'EarlyStopping: ', 'Model', 'PYTHONHASHSEED', 'YOLO', '[', ']', '_', 'arch_string_raw', 'args', 'best.pt', 'best_fitness', 'bilinear', 'brand_raw', 'cpu', 'cuda', 'cuda:', 'cuda:0', 'ema', 'epoch', 'half', 'hardware_raw', 'inf', 'inference', 'is_fused', 'list', 'model', 'model/GFLOPs', 'model/name', 'model/parameters', 'module_list.', 'mps', 'mps:0', 'nan', 'none', 'optimizer', 'process_group', 'reducer', 'state', 'step', 'stride', 'symbolic_opset', 'to', 'train_args', 'unknown', 'updates', 'yaml', 'yaml_file', 'yolo']

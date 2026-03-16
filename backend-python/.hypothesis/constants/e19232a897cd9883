@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\datasets\kinetics.py
+# hypothesis_version: 6.151.6
+
+["'", '(', ')', '/,:', '400', '600', '700', 'TCHW', 'THWC', '_', 'annotations', 'avi', 'files', 'label', 'mp4', 'num_classes', 'split', 'tars', 'test', 'time_end', 'time_start', 'train', 'unknown', 'val', 'youtube_id']

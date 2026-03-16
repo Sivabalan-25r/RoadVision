@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\distributed\tensor\__init__.py
+# hypothesis_version: 6.151.6
+
+['DTensor', 'Partial', 'Placement', 'Replicate', 'Shard', 'distribute_module', 'distribute_tensor', 'empty', 'full', 'ones', 'rand', 'randn', 'zeros']

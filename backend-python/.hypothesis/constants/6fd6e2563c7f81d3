@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\_inductor\runtime\runtime_utils.py
+# hypothesis_version: 6.151.6
+
+[0.012, 650, 65535, 'blue', 'bool', 'bool_', 'green', 'num_stages', 'num_warps', 'pre_hook', 'red', 'yellow']

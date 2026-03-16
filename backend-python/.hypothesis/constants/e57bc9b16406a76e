@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\testing\_internal\logging_tensor.py
+# hypothesis_version: 6.151.6
+
+[', ', 'LoggingTensor', 'elem', 'input', 'requires_grad']

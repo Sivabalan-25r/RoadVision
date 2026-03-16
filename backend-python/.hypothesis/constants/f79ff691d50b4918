@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\printing\python.py
+# hypothesis_version: 6.151.6
+
+[" = Function('", " = Symbol('", "')\n", 'Add', 'Infinity', 'Integer', 'Mul', 'NegativeInfinity', 'Pow', '_', '_print_%s', 'e = ', '{', '}']

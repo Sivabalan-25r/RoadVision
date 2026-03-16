@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\data\base.py
+# hypothesis_version: 6.151.6
+
+[0.5, 1.0, 640, 1000, '**', '*.*', '.', './', '.npy', '/', 'Disk', 'RAM', 'bboxes', 'cls', 'disk', 'img', 'keypoints', 'ori_shape', 'ram', 'ratio_pad', 'rect_shape', 'resized_shape', 'segments', 'shape']

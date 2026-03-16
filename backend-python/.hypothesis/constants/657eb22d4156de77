@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\sam\modules\tiny_encoder.py
+# hypothesis_version: 6.151.6
+
+[-0.5, 0.0, 1e-06, 0.1, 1.0, 4.0, 192, 224, 256, 320, 384, 448, 576, 768, 1000, 'ab', 'attention_bias_idxs', 'attention_biases', 'bn', 'c', 'lr_scale']

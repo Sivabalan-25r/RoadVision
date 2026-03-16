@@ -1,6 +1,6 @@
 """
-RoadVision — Plate Reader (YOLOv8 Dedicated License Plate Detector)
-Loads the keremberke/yolov8-license-plate model once at startup,
+RoadVision — Plate Reader (YOLOv26 Dedicated License Plate Detector)
+Loads the YOLOv26 license plate detector model once at startup,
 detects plates, applies geometric filters, preprocesses crops for OCR,
 and reads text via PaddleOCR (or CRNN when weights are available).
 """
@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import sys
+import time
 from typing import Optional, Tuple, List, Any, Dict, Union, cast
 
 # Ensure backend-python is in path for local imports
@@ -31,101 +32,114 @@ except ImportError:
     # Fallback for linter/environment issues
     def recognize_plate(p, v): return ("", 0.0)
 
+# Import centralized configuration
+import config
+
 logger = logging.getLogger(__name__)
 
 # ---- YOLO Plate Detector ----
 _plate_model = None
+_use_half_precision = False  # Will be set during model loading
 
-PLATE_MODEL_PATH = os.path.join(
-    os.path.dirname(__file__), '..', 'models', 'license_plate_detector.pt'
-)
-
-# Aggressive filtering to eliminate background ghosts
-DETECTION_CONF = 0.25  # Low threshold catches more plates; false positives filtered by OCR+rules
-DETECTION_IMGSZ = 320  # Max speed mode (35fps+ on standard CPU)
-USE_HALF = False  # FP16 quantization (set True with CUDA GPU)
-
-# ---- Geometric Filter Thresholds (from RoadVision Deep Dive) ----
-# Relaxed to catch more real plates — shop signs are rejected downstream by
-# OCR validation + Indian plate pattern matching, not by YOLO thresholds.
-MIN_ASPECT_RATIO = 1.5   # w/h minimum (allows two-line bike plates)
-MAX_ASPECT_RATIO = 7.0   # w/h maximum (wide plates)
-MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
-MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
-MIN_PLATE_AREA = 750     # Rejects small background noise
-MAX_PLATE_AREA = 100000  # Reject anything taking too much screen (likely error)
-MAX_PLATE_AREA_RATIO = 0.15  # Rejected if >15% of frame (false positive windshield)
-
-# ---- OCR Confidence Threshold ----
-OCR_MIN_CONFIDENCE = 0.25  # Balance between missing plates and noise
-
-# ---- Text Cleaning ----
-MIN_CLEANED_LENGTH = 5  # Reduced from 6 to catch shorter plates
-MAX_CLEANED_LENGTH = 12
-
-OCR_CORRECTIONS = {
-    '|': '1', 'l': '1', 'i': '1',
-    'o': '0', 'q': '0',
-    's': '5', 'z': '2', 'b': '8', 'g': '6',
-    '(': 'C', ')': 'J', '[': 'L', ']': 'J',
-}
-
-KNOWN_FALSE_POSITIVES = {
-    'IND', 'INDIA', 'TEST', 'SAMPLE', 'DEMO',
-    'GOVT', 'POLICE', 'TAXI', 'AUTO',
-    # Shop / building sign patterns (non-plate alphanumeric strings)
-    'SHOP', 'STORE', 'MART', 'HOTEL', 'CAFE', 'OPEN', 'CLOSED',
-    'PHONE', 'MOBILE', 'CALL', 'EXIT', 'ROAD', 'STREET', 'NAGAR',
-}
+# Configuration values are now imported from config.py
+# Access via config.MIN_ASPECT_RATIO, config.YOLO_CONFIDENCE_THRESHOLD, etc.
 
 
 def load_plate_model():
-    """Load the dedicated YOLOv8 license plate detector model.
+    """Load the dedicated YOLOv26 license plate detector model.
 
     MUST be called once at startup. Raises FileNotFoundError if the
     model file is missing — the server cannot operate without it.
+    
+    Logs model parameters, inference configuration, and performance metrics.
     """
-    global _plate_model
+    global _plate_model, _use_half_precision
     if _plate_model is not None:
         return _plate_model
 
     import functools
+    import time
 
-    if not os.path.exists(PLATE_MODEL_PATH):
+    if not os.path.exists(config.YOLO_MODEL_PATH):
         raise FileNotFoundError(
-            f"License plate detector model not found at: {PLATE_MODEL_PATH}\n"
+            f"License plate detector model not found at: {config.YOLO_MODEL_PATH}\n"
             f"Please place 'license_plate_detector.pt' in backend-python/models/.\n"
             f"This model is required — the server cannot start without it."
         )
 
-    logger.info(f"Loading YOLOv8 plate detector: {PLATE_MODEL_PATH}")
+    logger.info(f"Loading YOLOv26 plate detector: {config.YOLO_MODEL_PATH}")
     
     # PyTorch 2.6+ defaults to weights_only=True which breaks older YOLO models.
     # Temporarily patch torch.load to use weights_only=False for model loading.
     _original_torch_load = torch.load
     torch.load = functools.partial(_original_torch_load, weights_only=False)
+    
+    load_start = time.time()
     try:
-        _plate_model = YOLO(PLATE_MODEL_PATH)
+        _plate_model = YOLO(config.YOLO_MODEL_PATH)
     finally:
         torch.load = _original_torch_load
     
-    logger.info("YOLOv8 plate detector loaded successfully.")
+    load_time = time.time() - load_start
+    
+    # Auto-detect CUDA and enable FP16 half-precision if available
+    cuda_available = False
+    try:
+        if torch.cuda.is_available():
+            cuda_available = True
+            _use_half_precision = config.YOLO_USE_HALF_PRECISION
+            if _use_half_precision:
+                logger.info(f"  ✓ CUDA GPU detected — enabling FP16 half-precision for speed")
+            else:
+                logger.info(f"  ✓ CUDA GPU detected — FP16 disabled in config")
+        else:
+            _use_half_precision = False
+            logger.info(f"  ℹ CUDA not available — using CPU inference")
+    except Exception as e:
+        logger.warning(f"  ⚠ CUDA detection failed: {e}")
+        _use_half_precision = False
+    
+    # Log model parameters and configuration
+    try:
+        # Get model parameter count
+        param_count = sum(p.numel() for p in _plate_model.model.parameters())
+        param_count_m = param_count / 1_000_000
+        
+        logger.info(f"  ✓ YOLOv26 plate detector loaded successfully")
+        logger.info(f"    - Model parameters: {param_count_m:.1f}M")
+        logger.info(f"    - Load time: {load_time:.2f}s")
+        logger.info(f"    - Inference size: {config.YOLO_IMAGE_SIZE}×{config.YOLO_IMAGE_SIZE}")
+        logger.info(f"    - Confidence threshold: {config.YOLO_CONFIDENCE_THRESHOLD}")
+        logger.info(f"    - FP16 half-precision: {'Enabled' if _use_half_precision else 'Disabled'}")
+        logger.info(f"    - Device: {'CUDA GPU' if cuda_available else 'CPU'}")
+    except Exception as e:
+        logger.warning(f"  ⚠ Could not retrieve model parameters: {e}")
+        logger.info(f"  ✓ YOLOv26 plate detector loaded successfully")
+    
+    # Run a quick inference test to measure performance
+    try:
+        test_frame = np.zeros((640, 640, 3), dtype=np.uint8)
+        inference_start = time.time()
+        _ = _plate_model(
+            test_frame,
+            verbose=False,
+            conf=config.YOLO_CONFIDENCE_THRESHOLD,
+            imgsz=config.YOLO_IMAGE_SIZE,
+            half=_use_half_precision,
+        )
+        inference_time = (time.time() - inference_start) * 1000  # Convert to ms
+        logger.info(f"    - Test inference time: {inference_time:.1f}ms")
+    except Exception as e:
+        logger.warning(f"  ⚠ Test inference failed: {e}")
+    
     return _plate_model
 
 
 def _get_plate_model():
     """Return the already-loaded YOLO model (singleton)."""
-    global _plate_model, USE_HALF
+    global _plate_model
     if _plate_model is None:
         _plate_model = load_plate_model()
-    
-    # Auto-detect CUDA for half precision on first call
-    try:
-        if torch.cuda.is_available():
-            USE_HALF = True
-            logger.info("CUDA detected — enabling FP16 half precision for speed")
-    except Exception:
-        pass
     
     return _plate_model
 
@@ -152,17 +166,17 @@ def passes_geometric_filter(
         return False
 
     area = w * h
-    if area < MIN_PLATE_AREA or area > MAX_PLATE_AREA:
+    if area < config.MIN_PLATE_AREA or area > config.MAX_PLATE_AREA:
         return False
 
     ratio = w / h
-    if ratio < MIN_ASPECT_RATIO or ratio > MAX_ASPECT_RATIO:
+    if ratio < config.MIN_ASPECT_RATIO or ratio > config.MAX_ASPECT_RATIO:
         return False
     
     # Reject detections that are too large (e.g., windshield, full vehicle)
     if frame_width > 0 and frame_height > 0:
         frame_area = frame_width * frame_height
-        if area > frame_area * MAX_PLATE_AREA_RATIO:
+        if area > frame_area * config.MAX_PLATE_AREA_RATIO:
             return False
 
     return True
@@ -354,7 +368,7 @@ def detect_plates(
 ) -> List[Dict[str, Any]]:
     """
     Detect license plates in a single frame using the dedicated
-    YOLOv8 license plate detector model.
+    YOLOv26 license plate detector model.
 
     Returns list of dicts with:
       - 'bbox': [x, y, w, h]
@@ -366,9 +380,9 @@ def detect_plates(
     results = model(
         frame,
         verbose=False,
-        conf=DETECTION_CONF,
-        imgsz=DETECTION_IMGSZ,
-        half=USE_HALF,
+        conf=config.YOLO_CONFIDENCE_THRESHOLD,
+        imgsz=config.YOLO_IMAGE_SIZE,
+        half=_use_half_precision,
         agnostic_nms=True,
     )
     detections: List[Dict[str, Any]] = []
@@ -464,7 +478,7 @@ def clean_text(text: str) -> str:
     text = text.strip().upper()
 
     corrected = [
-        OCR_CORRECTIONS.get(ch.lower(), ch)
+        config.OCR_CORRECTIONS.get(ch.lower(), ch)
         for ch in text
     ]
     text = ''.join(corrected)
@@ -479,10 +493,10 @@ def is_garbage_text(text: str) -> bool:
     """
     Detect garbage recognition results.
     """
-    if len(text) < MIN_CLEANED_LENGTH or len(text) > MAX_CLEANED_LENGTH:
+    if len(text) < config.MIN_PLATE_LENGTH or len(text) > config.MAX_PLATE_LENGTH:
         return True
 
-    if text in KNOWN_FALSE_POSITIVES:
+    if text in config.KNOWN_FALSE_POSITIVES:
         return True
 
     # All same character
@@ -649,7 +663,7 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
     for variant in variants:
         try:
             raw_text, confidence = recognize_plate(plate_image, variant)
-            if not raw_text or confidence < OCR_MIN_CONFIDENCE:
+            if not raw_text or confidence < config.OCR_CONFIDENCE_THRESHOLD:
                 continue
                 
             cleaned = clean_text(raw_text)

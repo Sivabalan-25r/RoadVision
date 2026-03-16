@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\models\detection\_utils.py
+# hypothesis_version: 6.151.6
+
+[1e-07, 0.5, 1.0, 1000.0, '0', 'BELOW_LOW_THRESHOLD', 'BETWEEN_THRESHOLDS', 'beta', 'ciou', 'diou', 'eps', 'giou', 'l1', 'smooth_l1', 'sum']

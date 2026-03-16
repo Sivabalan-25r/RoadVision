@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\rtdetr\model.py
+# hypothesis_version: 6.151.6
+
+['detect', 'model', 'predictor', 'rtdetr-l.pt', 'trainer', 'validator']

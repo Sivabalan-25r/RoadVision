@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\nn\modules\head.py
+# hypothesis_version: 6.151.6
+
+[0.0, 0.01, 0.05, 0.25, 0.5, 1.0, 2.0, 100, 256, 300, 512, 640, 1024, 1280, 2048, 'Classify', 'Detect', 'OBB', 'Pose', 'RTDETRDecoder', 'Segment', 'cpu', 'edgetpu', 'ij', 'inf', 'pb', 'saved_model', 'tfjs', 'tflite']

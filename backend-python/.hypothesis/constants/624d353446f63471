@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\polys\domains\modularinteger.py
+# hypothesis_version: 6.151.6
+
+['%s mod %s', '%s(%s)', '1.13', 'ModularIntegerMod%s', 'val']

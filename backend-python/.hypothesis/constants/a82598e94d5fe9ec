@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\utils\ops.py
+# hypothesis_version: 6.151.6
+
+[0.0, 0.05, 0.1, 0.25, 0.45, 0.5, 1.0, 2.0, 180, 255, 300, 640, 1000, 7680, 30000, '_', 'bilinear', 'concat', 'cuda', 'float32', 'largest', 'uint8']

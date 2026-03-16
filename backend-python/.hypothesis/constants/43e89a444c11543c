@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\core\kind.py
+# hypothesis_version: 6.151.6
+
+['%s is not a kind.', ', ', '-', '<%s>', '<dispatched %s>', '=', 'BooleanKind', 'Inputs: %s\n', 'Kind dispatcher : %s', 'NumberKind', 'UndefinedKind', '_inst', 'on_ambiguity']

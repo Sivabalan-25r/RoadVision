@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\fx\passes\regional_inductor.py
+# hypothesis_version: 6.151.6
+
+['call_module', 'custom', 'from_tracing_context', 'get_attr', 'inductor_configs', 'meta', 'output', 'placeholder', 'regional_inductor', 'val']

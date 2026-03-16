@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\models\segmentation\_utils.py
+# hypothesis_version: 6.151.6
+
+['aux', 'aux_classifier', 'bilinear', 'out']

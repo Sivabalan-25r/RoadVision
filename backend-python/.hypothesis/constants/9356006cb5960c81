@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\utils\checks.py
+# hypothesis_version: 6.151.6
+
+[0.5, 100, 128, 200, 1024, '!=', '#', '([^0-9]*)([\\d.]+)', '(not installed)', '**', '+', ',', ', ', '--query-gpu=count', '.', '.git', '.pt', '.yaml', '.yml', '/', '0.0.0', '0.13', '0.14', '0.15', '1.12', '1.13', '2.0', '3.12', '3.8.0', '://', '<', '<=', '==', '>', '>=', 'AMP: ', 'Arial.ttf', 'DISPLAY', 'Python ', '\\1u.pt', '\\d+', 'bold', 'bus.jpg', 'cpu', 'extra == ', 'grpc://', 'http', 'http://', 'https://', 'info', 'mps', 'nvidia-smi', 'red', 'requirements.txt', 'requirements:', 'rtmp://', 'rtsp://', 'sample_data', 'tcp://', 'test', 'u', 'u.yaml', 'ultralytics', 'utf-8', 'version', 'wandb', 'yolov3', 'yolov5', 'yolov8n', 'yolov8n.pt', '✅ ', '❌ ']

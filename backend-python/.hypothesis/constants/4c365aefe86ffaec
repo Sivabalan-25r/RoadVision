@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\pose\val.py
+# hypothesis_version: 6.151.6
+
+[0.53, '%11s', '%22s', 'Box(P', 'Class', 'Images', 'Instances', 'Pose(P', 'R', 'batch_idx', 'bbox', 'bboxes', 'category_id', 'cls', 'conf', 'im_file', 'image_id', 'img', 'imgsz', 'keypoints', 'kpt_shape', 'kpts', 'mAP50', 'mAP50-95)', 'mps', 'ori_shape', 'path', 'pose', 'pred_cls', 'predictions.json', 'pycocotools>=2.0.6', 'ratio_pad', 'score', 'target_cls', 'tp', 'tp_p']

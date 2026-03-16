@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\export\dynamic_shapes.py
+# hypothesis_version: 6.151.6
+
+[' = ', 'AdditionalInputs', 'Constraint', 'Dim', 'ShapeEnv', 'Source', 'Suggested fixes:', 'Symbol', '_DimHint', 'dim', 'dims', 'inputs', 'max', 'min', 'min must be <= max', 'mismatch', 't_id']

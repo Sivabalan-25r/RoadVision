@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\sam\predict.py
+# hypothesis_version: 6.151.6
+
+[0.7, 0.88, 0.95, 1.0, 57.12, 57.375, 58.395, 103.53, 116.28, 123.675, 512, 1024, 1500, 'bboxes', 'bilinear', 'holes', 'islands', 'masks', 'points', 'predict', 'segment']

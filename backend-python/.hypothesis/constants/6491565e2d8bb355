@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\integrals\transforms.py
+# hypothesis_version: 6.151.6
+
+['!=', '==', 'Cosine', 'Fourier', 'Gamma', 'Hankel', 'Inverse Cosine', 'Inverse Fourier', 'Inverse Hankel', 'Inverse Mellin', 'Inverse Sine', 'Mellin', 'None', 'Sine', 'a is not an integer', 'c', 'does not converge', 'mellin-transform', 'needeval', 'no convergence found', 's', 'simplify', 't']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\sympy\simplify\epathtools.py
+# hypothesis_version: 6.151.6
+
+['%s(%r)', '*', '/', ':', '?', '[', ']', '_', '__iter__', '_epath', '_path', 'empty EPath', 'empty element', 'empty selector', 'non-root EPath', '|']

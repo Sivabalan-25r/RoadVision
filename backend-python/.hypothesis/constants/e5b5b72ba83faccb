@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\ops\feature_pyramid_network.py
+# hypothesis_version: 6.151.6
+
+['bias', 'inner_blocks', 'layer_blocks', 'nearest', 'p6', 'p7', 'pool', 'version', 'weight']

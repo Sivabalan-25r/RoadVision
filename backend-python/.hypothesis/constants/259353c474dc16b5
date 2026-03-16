@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\utils\callbacks\hub.py
+# hypothesis_version: 6.151.6
+
+['ckpt', 'hub', 'hub_session', 'metrics', 'metrics/mAP50-95(B)', 'on_export_start', 'on_fit_epoch_end', 'on_model_save', 'on_predict_start', 'on_train_end', 'on_train_start', 'on_val_start', 'train']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\pyparsing\util.py
+# hypothesis_version: 6.151.6
+
+[128, '\x00', '([a-z])([A-Z])', '0', '?', '?:', 'C', '\\1_\\2', '\\^-[]', '\\^-][', '\\n', '\\t', '__func__', '__init__', 'configuration', 'self', 'u', 'x', '|']

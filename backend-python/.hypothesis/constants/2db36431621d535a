@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torchvision\datasets\dtd.py
+# hypothesis_version: 6.151.6
+
+['/', 'dtd', 'images', 'labels', 'split', 'test', 'train', 'val']

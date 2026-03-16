@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\torch\distributed\_functional_collectives.py
+# hypothesis_version: 6.151.6
+
+['(', 'DEF', 'IMPL', 'Meta', '_c10d_functional', 'all_reduce', 'all_reduce_', 'all_reduce_coalesced', 'all_to_all_single', 'avg', 'band', 'bor', 'broadcast', 'broadcast_', 'bxor', 'c10d_functional', 'completed', 'elem', 'group cannot be None', 'max', 'min', 'product', 'sum', 'wait_tensor']

@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\models\yolo\obb\val.py
+# hypothesis_version: 6.151.6
+
+[0.3, '%g ', '-', 'DOTA', '\\d+___\\d+', '__', '___', 'a', 'batch_idx', 'bbox', 'bboxes', 'category_id', 'cls', 'im_file', 'image_id', 'img', 'imgsz', 'obb', 'ori_shape', 'poly', 'predictions.json', 'predictions_txt', 'ratio_pad', 'rbox', 'score']

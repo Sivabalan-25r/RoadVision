@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\ultralytics\data\dataset.py
+# hypothesis_version: 6.151.6
+
+[0.0, 1.0, 100, 1000, './labels.cache', '.cache', '.npy', '/', '1.0.3', 'annotations', 'batch_idx', 'bbox', 'bbox_format', 'bboxes', 'caption', 'cls', 'detect', 'disk', 'file_name', 'hash', 'height', 'im_file', 'image_id', 'images', 'img', 'instances', 'iscrowd', 'keypoints', 'kpt_shape', 'labels', 'masks', 'msgs', 'names', 'nc', 'normalized', 'obb', 'pose', 'r', 'ram', 'results', 'segment', 'segments', 'shape', 'texts', 'tokens_positive', 'version', 'width', 'xywh']

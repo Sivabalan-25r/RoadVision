@@ -1,0 +1,4 @@
+# file: C:\Users\Sivab\AppData\Roaming\Python\Python314\site-packages\setuptools\depends.py
+# hypothesis_version: 6.151.6
+
+['LOAD_CONST', 'Require', 'STORE_GLOBAL', 'STORE_NAME', '_T', '__version__', 'cli', 'exec', 'extract_constant', 'find_module', 'get_module_constant', 'java', 'unknown']
