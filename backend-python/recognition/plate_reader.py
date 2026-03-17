@@ -41,6 +41,15 @@ logger = logging.getLogger(__name__)
 _plate_model = None
 _use_half_precision = False  # Will be set during model loading
 
+# ---- PaddleOCR Instance ----
+_paddleocr_instance = None
+
+# ---- EasyOCR Instance ----
+_easyocr_instance = None
+
+# ---- Tesseract availability flag ----
+_tesseract_available: Optional[bool] = None
+
 # Configuration values are now imported from config.py
 # Access via config.MIN_ASPECT_RATIO, config.YOLO_CONFIDENCE_THRESHOLD, etc.
 
@@ -142,6 +151,313 @@ def _get_plate_model():
         _plate_model = load_plate_model()
     
     return _plate_model
+
+
+# ---- PaddleOCR PP-OCRv5 ----
+
+def load_paddleocr_model():
+    """Load the PaddleOCR PP-OCRv5 model once at startup.
+
+    If PaddleOCR is not installed or fails to load, logs a warning and
+    sets the instance to None (graceful degradation — other OCR engines
+    in the fallback chain will be used instead).
+    """
+    global _paddleocr_instance
+    if _paddleocr_instance is not None:
+        return _paddleocr_instance
+
+    try:
+        from paddleocr import PaddleOCR  # type: ignore
+
+        logger.info("Loading PaddleOCR PP-OCRv5 model...")
+        load_start = time.time()
+
+        _paddleocr_instance = PaddleOCR(
+            use_angle_cls=True,
+            lang="en",
+            show_log=False,
+        )
+
+        load_time = time.time() - load_start
+        logger.info(f"  ✓ PaddleOCR PP-OCRv5 loaded successfully (load time: {load_time:.2f}s)")
+    except ImportError:
+        logger.warning(
+            "PaddleOCR is not installed — OCR will fall back to CRNN/EasyOCR/Tesseract. "
+            "Install with: pip install paddleocr"
+        )
+        _paddleocr_instance = None
+    except Exception as e:
+        logger.warning(f"PaddleOCR failed to load: {e} — falling back to other OCR engines")
+        _paddleocr_instance = None
+
+    return _paddleocr_instance
+
+
+def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
+    """Run PaddleOCR PP-OCRv5 inference on a plate crop.
+
+    Args:
+        plate_image: Plate crop as a numpy array (BGR or grayscale).
+
+    Returns:
+        (text, confidence) tuple. Returns ("", 0.0) when PaddleOCR is
+        unavailable, returns no results, or confidence is below the
+        minimum threshold (config.OCR_CONFIDENCE_THRESHOLD = 0.25).
+    """
+    global _paddleocr_instance
+
+    if _paddleocr_instance is None:
+        _paddleocr_instance = load_paddleocr_model()
+
+    if _paddleocr_instance is None:
+        logger.debug("PaddleOCR unavailable — skipping inference")
+        return ("", 0.0)
+
+    if plate_image is None or plate_image.size == 0:
+        logger.debug("Empty plate image passed to recognize_plate_paddleocr")
+        return ("", 0.0)
+
+    inference_start = time.time()
+    try:
+        results = _paddleocr_instance.ocr(plate_image, cls=True)
+    except Exception as e:
+        logger.error(f"PaddleOCR inference error: {e}")
+        return ("", 0.0)
+
+    inference_time = (time.time() - inference_start) * 1000  # ms
+
+    # PaddleOCR returns: [[[box, (text, confidence)], ...]] or None
+    if not results or results[0] is None:
+        logger.debug(f"PaddleOCR returned no results (inference: {inference_time:.1f}ms)")
+        return ("", 0.0)
+
+    # Collect all text lines and pick the one with highest confidence
+    best_text = ""
+    best_conf = 0.0
+
+    for line in results[0]:
+        if not line or len(line) < 2:
+            continue
+        text_conf = line[1]
+        if not text_conf or len(text_conf) < 2:
+            continue
+        text = str(text_conf[0])
+        conf = float(text_conf[1])
+
+        if conf > best_conf:
+            best_text = text
+            best_conf = conf
+
+    # Apply minimum confidence threshold
+    if best_conf < config.OCR_CONFIDENCE_THRESHOLD:
+        logger.debug(
+            f"PaddleOCR confidence {best_conf:.3f} below threshold "
+            f"{config.OCR_CONFIDENCE_THRESHOLD} — rejecting '{best_text}' "
+            f"(inference: {inference_time:.1f}ms)"
+        )
+        return ("", 0.0)
+
+    logger.info(
+        f"PaddleOCR result: '{best_text}' (conf={best_conf:.3f}, "
+        f"inference={inference_time:.1f}ms)"
+    )
+    return (best_text, best_conf)
+
+
+# ---- EasyOCR Engine ----
+
+def recognize_plate_easyocr(plate_image: np.ndarray) -> Tuple[str, float]:
+    """Run EasyOCR inference on a plate crop.
+
+    Args:
+        plate_image: Plate crop as a numpy array (BGR or grayscale).
+
+    Returns:
+        (text, confidence) tuple. Returns ("", 0.0) when EasyOCR is
+        unavailable, returns no results, or confidence is below threshold.
+    """
+    global _easyocr_instance
+
+    if plate_image is None or plate_image.size == 0:
+        logger.debug("Empty plate image passed to recognize_plate_easyocr")
+        return ("", 0.0)
+
+    try:
+        import easyocr  # type: ignore
+    except ImportError:
+        logger.debug("EasyOCR is not installed — skipping")
+        return ("", 0.0)
+
+    try:
+        if _easyocr_instance is None:
+            logger.debug("Initializing EasyOCR reader (lazy load)...")
+            _easyocr_instance = easyocr.Reader(['en'], gpu=False)
+    except Exception as e:
+        logger.warning(f"EasyOCR failed to initialize: {e}")
+        return ("", 0.0)
+
+    try:
+        results = _easyocr_instance.readtext(plate_image)
+    except Exception as e:
+        logger.warning(f"EasyOCR inference error: {e}")
+        return ("", 0.0)
+
+    if not results:
+        return ("", 0.0)
+
+    # Pick result with highest confidence
+    best_text = ""
+    best_conf = 0.0
+    for (_bbox, text, conf) in results:
+        conf = float(conf)
+        if conf > best_conf:
+            best_text = str(text)
+            best_conf = conf
+
+    if best_conf < config.OCR_CONFIDENCE_THRESHOLD:
+        logger.debug(
+            f"EasyOCR confidence {best_conf:.3f} below threshold "
+            f"{config.OCR_CONFIDENCE_THRESHOLD} — rejecting '{best_text}'"
+        )
+        return ("", 0.0)
+
+    logger.info(f"EasyOCR result: '{best_text}' (conf={best_conf:.3f})")
+    return (best_text, best_conf)
+
+
+# ---- Tesseract Engine ----
+
+def recognize_plate_tesseract(plate_image: np.ndarray) -> Tuple[str, float]:
+    """Run Tesseract OCR inference on a plate crop.
+
+    Args:
+        plate_image: Plate crop as a numpy array (BGR or grayscale).
+
+    Returns:
+        (text, confidence) tuple. Returns ("", 0.0) when Tesseract is
+        unavailable, returns no results, or confidence is below threshold.
+    """
+    global _tesseract_available
+
+    if plate_image is None or plate_image.size == 0:
+        logger.debug("Empty plate image passed to recognize_plate_tesseract")
+        return ("", 0.0)
+
+    if _tesseract_available is False:
+        return ("", 0.0)
+
+    try:
+        import pytesseract  # type: ignore
+        _tesseract_available = True
+    except ImportError:
+        logger.debug("pytesseract is not installed — skipping")
+        _tesseract_available = False
+        return ("", 0.0)
+
+    try:
+        tess_config = (
+            '--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        )
+        data = pytesseract.image_to_data(
+            plate_image,
+            output_type=pytesseract.Output.DICT,
+            config=tess_config,
+        )
+    except Exception as e:
+        logger.warning(f"Tesseract inference error: {e}")
+        return ("", 0.0)
+
+    # Collect words with valid confidence
+    best_text = ""
+    best_conf = 0.0
+    texts = data.get('text', [])
+    confs = data.get('conf', [])
+
+    for raw_text, raw_conf in zip(texts, confs):
+        try:
+            conf_val = float(raw_conf)
+        except (ValueError, TypeError):
+            continue
+        if conf_val < 0:
+            continue
+        # Tesseract confidence is 0-100; normalize to 0.0-1.0
+        conf_norm = conf_val / 100.0
+        word = str(raw_text).strip()
+        if word and conf_norm > best_conf:
+            best_text = word
+            best_conf = conf_norm
+
+    if best_conf < config.OCR_CONFIDENCE_THRESHOLD:
+        logger.debug(
+            f"Tesseract confidence {best_conf:.3f} below threshold "
+            f"{config.OCR_CONFIDENCE_THRESHOLD} — rejecting '{best_text}'"
+        )
+        return ("", 0.0)
+
+    logger.info(f"Tesseract result: '{best_text}' (conf={best_conf:.3f})")
+    return (best_text, best_conf)
+
+
+# ---- OCR Fallback Chain ----
+
+def _run_ocr_with_fallback(plate_image: np.ndarray) -> Tuple[str, float]:
+    """Try each OCR engine in sequence: PaddleOCR → CRNN → EasyOCR → Tesseract.
+
+    Returns the result from the first engine that meets the confidence
+    threshold, or the best result found if none meet the threshold.
+    Falls back to ("", 0.0) if all engines fail or return empty.
+
+    Args:
+        plate_image: Plate crop as a numpy array.
+
+    Returns:
+        (text, confidence) from the best available engine.
+    """
+    threshold = config.OCR_CONFIDENCE_THRESHOLD
+
+    engines = [
+        ("PaddleOCR", recognize_plate_paddleocr),
+        ("CRNN",      lambda img: recognize_plate(img, img)),
+        ("EasyOCR",   recognize_plate_easyocr),
+        ("Tesseract", recognize_plate_tesseract),
+    ]
+
+    best_text = ""
+    best_conf = 0.0
+    best_engine = ""
+
+    for engine_name, engine_fn in engines:
+        try:
+            text, conf = engine_fn(plate_image)
+        except Exception as e:
+            logger.warning(f"OCR engine {engine_name} raised an error: {e}")
+            continue
+
+        if text == "" and conf == 0.0:
+            # Engine unavailable or returned nothing useful
+            logger.debug(f"OCR engine {engine_name} returned no result — skipping")
+            continue
+
+        if conf >= threshold:
+            logger.info(f"OCR engine used: {engine_name} (conf={conf:.2f})")
+            return (text, conf)
+
+        # Below threshold — keep as candidate in case nothing better comes along
+        logger.info(
+            f"OCR fallback: {engine_name} insufficient (conf={conf:.2f}), "
+            f"trying next engine"
+        )
+        if conf > best_conf:
+            best_text = text
+            best_conf = conf
+            best_engine = engine_name
+
+    if best_text:
+        logger.info(f"OCR engine used (best available): {best_engine} (conf={best_conf:.2f})")
+        return (best_text, best_conf)
+
+    logger.debug("All OCR engines returned empty results")
+    return ("", 0.0)
 
 
 # ---- Geometric Filtering ----
@@ -267,44 +583,39 @@ def _apply_multiple_thresholds(image: np.ndarray) -> np.ndarray:
 def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     """
     Preprocess a plate crop for OCR recognition with adaptive pipeline.
+
+    Pipeline (Requirements 7.1–7.6):
+      1. Bilateral filtering  — noise reduction while preserving edges (Req 7.1)
+      2. CLAHE                — shadow / glare handling (Req 7.2)
+      3. Sharpening kernel    — character edge enhancement (Req 7.3)
+      4. Adaptive thresholding (Gaussian, Mean, OTSU best-pick) (Req 7.4, 7.5)
+      5. Resize to 320×120 with cubic interpolation (Req 7.6)
     """
     if len(plate_crop.shape) == 3:
         gray = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
     else:
         gray = plate_crop.copy()
 
-    # Aggressive upscaling
-    h, w = gray.shape
-    target_height = 160
-    
-    if h < target_height:
-        scale = target_height / h
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-        gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
-        h, w = gray.shape
-    
-    # Bilateral filtering (the "Secret Sauce" from RoadVision Deep Dive)
-    # Smooths noise while keeping character edges sharp — faster than NLM denoising
+    # Step 1: Bilateral filtering — smooths noise while keeping character edges sharp
     gray = cv2.bilateralFilter(gray, 9, 75, 75)
 
-    # CLAHE (Adaptive Histogram Equalization) — fixes shadows and glares
+    # Step 2: CLAHE — adaptive histogram equalization for shadow/glare handling
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
-    
-    kernel_sharpen = np.array([[-1,-1,-1], [-1, 9,-1], [-1,-1,-1]])
+
+    # Step 3: Sharpening kernel — enhance character edges
+    kernel_sharpen = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
     sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
+
+    # Step 4: Adaptive thresholding — Gaussian, Mean, OTSU; best by edge density
     thresh = _apply_multiple_thresholds(sharpened)
-    
+
+    # Morphological closing to connect broken character strokes
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 2))
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
-    target_width = 400
-    aspect_ratio = w / h if h > 0 else 1
-    target_height = int(target_width / aspect_ratio)
-    target_height = max(80, min(200, target_height))
-    
-    return cv2.resize(thresh, (target_width, target_height), interpolation=cv2.INTER_CUBIC)
+    # Step 5: Resize to 320×120 with cubic interpolation (Req 7.6)
+    return cv2.resize(thresh, (320, 120), interpolation=cv2.INTER_CUBIC)
 
 
 
@@ -647,23 +958,30 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
     Read text from a plate crop image using an Ensemble OCR strategy.
     
     Pipeline:
-      1. Run OCR on multiple image variants
-      2. Scoring and validation
-      3. Return best candidate
+      1. Generate 4 preprocessing variants (original, CLAHE, sharpened, thresholded)
+      2. Run OCR on each variant via the fallback chain
+      3. Select the variant with the highest confidence score
+      4. Return the best candidate text
     """
     if plate_image is None or plate_image.size == 0:
         return None
 
-    # Generate image variants
+    # Generate 4 image variants: original, CLAHE, sharpened, thresholded
     variants = preprocess_plate_variants(plate_image)
+    variant_names = ["original", "CLAHE", "sharpened", "thresholded"]
     
     candidates = []
     
-    # Run OCR on each variant
-    for variant in variants:
+    # Run OCR on each variant using the fallback chain
+    for variant_idx, variant in enumerate(variants):
+        variant_name = variant_names[variant_idx] if variant_idx < len(variant_names) else f"variant_{variant_idx}"
         try:
-            raw_text, confidence = recognize_plate(plate_image, variant)
+            raw_text, confidence = _run_ocr_with_fallback(variant)
             if not raw_text or confidence < config.OCR_CONFIDENCE_THRESHOLD:
+                logger.debug(
+                    f"Ensemble variant '{variant_name}': no result "
+                    f"(conf={confidence:.3f})"
+                )
                 continue
                 
             cleaned = clean_text(raw_text)
@@ -672,6 +990,9 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
             cleaned = _apply_position_based_corrections(cleaned)
             
             if is_garbage_text(cleaned):
+                logger.debug(
+                    f"Ensemble variant '{variant_name}': garbage text '{cleaned}' — skipped"
+                )
                 continue
             
             # Validation
@@ -681,7 +1002,7 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
             except ImportError:
                 validation = None
             
-            # Score
+            # Score: base confidence + bonus for valid format
             score = confidence
             if validation and not getattr(validation, "violation", True):
                 score += 1.0 
@@ -689,19 +1010,30 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
             candidates.append({
                 'text': cleaned,
                 'score': score,
-                'confidence': confidence
+                'confidence': confidence,
+                'variant': variant_name,
             })
+            logger.debug(
+                f"Ensemble variant '{variant_name}': '{cleaned}' "
+                f"(conf={confidence:.3f}, score={score:.3f})"
+            )
         except Exception as e:
-            logger.error(f"Ensemble variant error: {e}")
+            logger.error(f"Ensemble variant '{variant_name}' error: {e}")
 
     if not candidates:
+        logger.debug("Ensemble OCR: all variants returned no usable result")
         return None
         
-    # Pick best
+    # Pick variant with highest score (highest confidence wins)
     candidates.sort(key=lambda x: x.get('score', 0), reverse=True)
     best = candidates[0]
     
-    logger.info(f"Ensemble Pick: '{best.get('text')}'")
+    logger.info(
+        f"Ensemble OCR selected variant '{best.get('variant')}': "
+        f"'{best.get('text')}' (conf={best.get('confidence', 0):.3f}, "
+        f"score={best.get('score', 0):.3f}) "
+        f"from {len(candidates)} candidate(s)"
+    )
     return cast(str, best.get('text'))
 
 
@@ -714,7 +1046,7 @@ def get_read_confidence(plate_image: np.ndarray, preprocessed_image: np.ndarray 
 
     try:
         ocr_image = preprocessed_image if preprocessed_image is not None else plate_image
-        _, confidence = recognize_plate(plate_image, ocr_image)
+        _, confidence = _run_ocr_with_fallback(ocr_image)
         return float(confidence) if confidence is not None else 0.0
     except Exception as e:
         logger.error(f"OCR confidence error: {e}")
