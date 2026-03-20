@@ -45,7 +45,7 @@ def test_video_processor_initializes_tracker():
     
     try:
         # Process the video
-        detections = process_video(video_path, frame_interval=1)
+        detections, _, _ = process_video(video_path, frame_interval=1)
         
         # The function should complete without errors
         # Even if no plates are detected, it should return an empty list
@@ -72,7 +72,7 @@ def test_video_processor_includes_track_ids():
     video_path = create_test_video(num_frames=5)
     
     try:
-        detections = process_video(video_path, frame_interval=1)
+        detections, _, _ = process_video(video_path, frame_interval=1)
         
         # All detections should have track_id field (even if None)
         for det in detections:

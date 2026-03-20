@@ -30,8 +30,8 @@ RoadVision analyzes traffic camera footage to detect and validate vehicle licens
 **Backend:**
 - Python 3.8+
 - FastAPI (REST API)
-- YOLOv8 (plate detection)
-- EasyOCR/PaddleOCR/Tesseract (text recognition)
+- YOLOv26 (plate detection)
+- PaddleOCR/EasyOCR/Tesseract ensemble (text recognition)
 - OpenCV (video processing)
 
 ## Quick Start
@@ -71,13 +71,13 @@ Video Upload
     ↓
 Frame Extraction (every 5th frame)
     ↓
-YOLOv8 Plate Detection
+YOLOv26 Plate Detection
     ↓
 Geometric Filtering (aspect ratio, size, position)
     ↓
 Image Preprocessing (CLAHE, adaptive threshold)
     ↓
-OCR Recognition (CRNN → EasyOCR → PaddleOCR → Tesseract)
+OCR Recognition (PaddleOCR → EasyOCR → Tesseract ensemble)
     ↓
 Indian RTO Format Validation
     ↓
@@ -118,12 +118,12 @@ RoadVision/
 │   ├── requirements.txt     # Dependencies
 │   ├── models/              # AI models
 │   │   ├── license_plate_detector.pt
-│   │   └── yolov8n.pt
+│   │   └── yolov26n.pt
 │   ├── processing/          # Video processing
 │   │   └── video_processor.py
 │   ├── recognition/         # OCR & detection
 │   │   ├── plate_reader.py
-│   │   └── crnn_recognizer.py
+│   │   └── (OCR engines)
 │   └── rules/               # Validation rules
 │       └── plate_rules.py
 └── docs/

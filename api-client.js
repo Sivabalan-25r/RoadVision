@@ -2,7 +2,7 @@
 // Handles all API calls to the backend with camera-based authentication
 
 // Get API base URL from config
-const API_BASE_URL = window.RoadVisionConfig ? window.RoadVisionConfig.API_BASE_URL : 'http://localhost:8001';
+const API_BASE_URL = window.RoadVisionConfig ? window.RoadVisionConfig.API_BASE_URL : 'http://localhost:8000';
 
 // Get current camera ID from localStorage
 function getCurrentCameraId() {

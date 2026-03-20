@@ -3,12 +3,19 @@
 
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — Live Monitoring</title>
   <meta name="description"
     content="RoadVision live traffic camera monitoring with real-time vehicle detection and bounding box overlays." />
   <style>
-    html,body{background:#020617;margin:0;padding:0;}
+    html,
+    body {
+      background: #020617;
+      margin: 0;
+      padding: 0;
+    }
+
     .plate-thumbnail {
       width: 120px;
       height: 40px;
@@ -20,11 +27,13 @@
       align-items: center;
       justify-content: center;
     }
+
     .plate-thumbnail img {
       width: 100%;
       height: 100%;
       object-fit: contain;
     }
+
     .plate-thumbnail-placeholder {
       width: 120px;
       height: 40px;
@@ -37,6 +46,7 @@
       border-radius: var(--radius-sm);
       border: 1px dashed var(--border-color);
     }
+
     .plate-number {
       font-family: 'Roboto Mono', monospace;
       letter-spacing: 1px;
@@ -45,7 +55,7 @@
       background: var(--primary-glow);
       padding: 4px 8px;
       border-radius: 4px;
-      border: 1px solid rgba(59,130,246,0.3);
+      border: 1px solid rgba(59, 130, 246, 0.3);
     }
   </style>
   <link rel="stylesheet" href="styles.css" />
@@ -207,410 +217,410 @@
   <script src="components/glare-hover.js"></script>
   <script>
     // Wait for DOM to be fully loaded
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
       console.log('DOM loaded, initializing monitoring page...');
-      
+
       // Check if API client is loaded
       if (typeof RoadVisionAPI === 'undefined') {
         console.error('RoadVisionAPI not loaded!');
         alert('Error: API client not loaded. Please refresh the page.');
         return;
       }
-      
+
       initMonitoringPage();
     });
-    
+
     function initMonitoringPage() {
-    // ============ Polyfill for roundRect (for older browsers) ============
-    if (!CanvasRenderingContext2D.prototype.roundRect) {
-      CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
-        if (!radii) {
-          return this.rect(x, y, w, h);
-        }
-        const r = Array.isArray(radii) ? radii[0] : radii;
-        this.beginPath();
-        this.moveTo(x + r, y);
-        this.lineTo(x + w - r, y);
-        this.quadraticCurveTo(x + w, y, x + w, y + r);
-        this.lineTo(x + w, y + h - r);
-        this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        this.lineTo(x + r, y + h);
-        this.quadraticCurveTo(x, y + h, x, y + h - r);
-        this.lineTo(x, y + r);
-        this.quadraticCurveTo(x, y, x + r, y);
-        this.closePath();
-        return this;
-      };
-    }
-
-    // ============ Canvas Bounding Box Renderer ============
-    const canvas = document.getElementById('bboxCanvas');
-    const ctx = canvas.getContext('2d');
-    const viewer = document.getElementById('monitorViewer');
-    const webcamVideo = document.getElementById('webcamVideo');
-    const staticImage = document.getElementById('staticImage');
-    const toggleWebcamBtn = document.getElementById('toggleWebcam');
-    const toggleDetectionBtn = document.getElementById('toggleDetection');
-    const camName = document.getElementById('camName');
-    const liveStats = document.getElementById('liveStats');
-    const legalCountEl = document.getElementById('legalCount');
-    
-    // Debug: Check if elements exist
-    console.log('Elements loaded:', {
-      canvas: !!canvas,
-      webcamVideo: !!webcamVideo,
-      staticImage: !!staticImage,
-      toggleWebcamBtn: !!toggleWebcamBtn,
-      toggleDetectionBtn: !!toggleDetectionBtn
-    });
-    
-    if (!toggleWebcamBtn) {
-      console.error('ERROR: toggleWebcam button not found!');
-      alert('Error: Camera button not found. Please refresh the page.');
-      return;
-    }
-    const illegalCountEl = document.getElementById('illegalCount');
-    const totalCountEl = document.getElementById('totalCount');
-    const recentLogBody = document.getElementById('recentLogBody');
-    const recentLogTable = document.getElementById('recentLogTable');
-    const recentLogEmpty = document.getElementById('recentLogEmpty');
-
-    let webcamStream = null;
-    let isWebcamActive = false;
-    let isDetectionActive = false;
-    let detectionInterval = null;
-    let currentDetections = [];
-    let previousDetections = []; // For smoothing bbox jitter
-    let seenPlates = new Set();
-    let legalCount = 0;
-    let illegalCount = 0;
-    let recentDetections = [];
-    let detectionHistory = {}; // Missing: used for tracking
-    let nextTrackId = 0;       // Missing: used for track IDs
-    
-    // Load camera info and update display
-    async function loadCameraInfo() {
-      try {
-        const cameraId = RoadVisionAPI.getCurrentCameraId();
-        const camera = await RoadVisionAPI.Camera.get(cameraId);
-        if (camera) {
-          camName.textContent = `${camera.name} - ${camera.location}`;
-        }
-      } catch (e) {
-        console.error('Error loading camera info:', e);
-      }
-    }
-    
-    // Load camera info on page load
-    loadCameraInfo();
-    
-    // Detection settings
-    const CONFIDENCE_THRESHOLD = 0.25; // Lowered to show more detections
-    const SMOOTHING_FACTOR = 0.5; // Smooth bbox movement (0-1, higher = more smoothing)
-    const IOU_THRESHOLD = 0.15; // IOU threshold for tracking (low = handles fast movement)
-    
-    // ---- IOU-Based Tracking with Smooth Bbox ----
-    function calculateIOU(boxA, boxB) {
-      // boxes are [x%, y%, w%, h%] as percentages
-      const [ax, ay, aw, ah] = boxA;
-      const [bx, by, bw, bh] = boxB;
-      
-      const x1 = Math.max(ax, bx);
-      const y1 = Math.max(ay, by);
-      const x2 = Math.min(ax + aw, bx + bw);
-      const y2 = Math.min(ay + ah, by + bh);
-      
-      const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-      const areaA = aw * ah;
-      const areaB = bw * bh;
-      const union = areaA + areaB - intersection;
-      
-      return union > 0 ? intersection / union : 0;
-    }
-    
-
-    // ---- Plate Similarity Function ----
-    // Calculate Levenshtein distance between two strings
-    function levenshteinDistance(str1, str2) {
-      const matrix = [];
-      for (let i = 0; i <= str2.length; i++) {
-        matrix[i] = [i];
-      }
-      for (let j = 0; j <= str1.length; j++) {
-        matrix[0][j] = j;
-      }
-      for (let i = 1; i <= str2.length; i++) {
-        for (let j = 1; j <= str1.length; j++) {
-          if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-            matrix[i][j] = matrix[i - 1][j - 1];
-          } else {
-            matrix[i][j] = Math.min(
-              matrix[i - 1][j - 1] + 1,
-              matrix[i][j - 1] + 1,
-              matrix[i - 1][j] + 1
-            );
+      // ============ Polyfill for roundRect (for older browsers) ============
+      if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, radii) {
+          if (!radii) {
+            return this.rect(x, y, w, h);
           }
-        }
+          const r = Array.isArray(radii) ? radii[0] : radii;
+          this.beginPath();
+          this.moveTo(x + r, y);
+          this.lineTo(x + w - r, y);
+          this.quadraticCurveTo(x + w, y, x + w, y + r);
+          this.lineTo(x + w, y + h - r);
+          this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+          this.lineTo(x + r, y + h);
+          this.quadraticCurveTo(x, y + h, x, y + h - r);
+          this.lineTo(x, y + r);
+          this.quadraticCurveTo(x, y, x + r, y);
+          this.closePath();
+          return this;
+        };
       }
-      return matrix[str2.length][str1.length];
-    }
 
-    // Check if plate is similar to any seen plate (within 1 character difference)
-    function isSimilarToSeenPlate(newPlate) {
-      const threshold = 1; // Allow only 1 character difference (stricter)
-      for (const seenPlate of seenPlates) {
-        // Exact match
-        if (newPlate === seenPlate) {
-          return true;
-        }
-        
-        // Similar length and small edit distance
-        if (Math.abs(newPlate.length - seenPlate.length) <= 1) {
-          const distance = levenshteinDistance(newPlate, seenPlate);
-          if (distance <= threshold) {
-            console.log(`Similar plate found: "${newPlate}" ≈ "${seenPlate}" (distance: ${distance})`);
-            return true;
-          }
-        }
-      }
-      return false;
-    }
+      // ============ Canvas Bounding Box Renderer ============
+      const canvas = document.getElementById('bboxCanvas');
+      const ctx = canvas.getContext('2d');
+      const viewer = document.getElementById('monitorViewer');
+      const webcamVideo = document.getElementById('webcamVideo');
+      const staticImage = document.getElementById('staticImage');
+      const toggleWebcamBtn = document.getElementById('toggleWebcam');
+      const toggleDetectionBtn = document.getElementById('toggleDetection');
+      const camName = document.getElementById('camName');
+      const liveStats = document.getElementById('liveStats');
+      const legalCountEl = document.getElementById('legalCount');
 
-    // Colors matching the design system
-    const COLORS = {
-      valid: { stroke: '#22C55E', fill: 'rgba(34,197,94,.15)', text: '#22C55E' },
-      violation: { stroke: '#EF4444', fill: 'rgba(239,68,68,.15)', text: '#EF4444' },
-      detecting: { stroke: '#3B82F6', fill: 'rgba(59,130,246,.15)', text: '#3B82F6' }
-    };
+      // Debug: Check if elements exist
+      console.log('Elements loaded:', {
+        canvas: !!canvas,
+        webcamVideo: !!webcamVideo,
+        staticImage: !!staticImage,
+        toggleWebcamBtn: !!toggleWebcamBtn,
+        toggleDetectionBtn: !!toggleDetectionBtn
+      });
 
-    // ---- Canvas sizing ----
-    function resizeCanvas() {
-      // Match canvas to video element dimensions for accurate overlay
-      if (isWebcamActive && webcamVideo.videoWidth > 0) {
-        // Use actual video dimensions
-        canvas.width = webcamVideo.videoWidth;
-        canvas.height = webcamVideo.videoHeight;
-        
-        // Scale canvas display to match viewer size
-        const rect = viewer.getBoundingClientRect();
-        canvas.style.width = rect.width + 'px';
-        canvas.style.height = rect.height + 'px';
-        
-        console.log('Canvas sized to video:', canvas.width, 'x', canvas.height, 'display:', rect.width, 'x', rect.height);
-      } else {
-        // Fallback to viewer dimensions
-        const rect = viewer.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-      }
-      
-      if (currentDetections.length) drawDetections(currentDetections);
-    }
-
-    window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('load', () => {
-      resizeCanvas();
-      // Load existing detection count from localStorage
-      loadExistingDetectionCount();
-    });
-
-    // ---- Load Existing Detection Count ----
-    async function loadExistingDetectionCount() {
-      try {
-        // Load existing detections from database for current camera
-        const detections = await RoadVisionAPI.Detection.getAll();
-        console.log(`Loading ${detections.length} existing detections from database`);
-        
-        // Populate seenPlates, counts, and recent detections
-        seenPlates.clear();
-        legalCount = 0;
-        illegalCount = 0;
-        recentDetections = [];
-        
-        detections.forEach(det => {
-          // Add to seen plates
-          if (det.detected_plate && det.detected_plate !== 'Detecting...') {
-            seenPlates.add(det.detected_plate);
-            
-            // Update counts
-            if (det.violation) {
-              illegalCount++;
-            } else {
-              legalCount++;
-            }
-            
-            // Add to recent detections (with timestamp)
-            recentDetections.push({
-              detected_plate: det.detected_plate,
-              violation: det.violation,
-              confidence: det.confidence,
-              time: det.timestamp ? new Date(det.timestamp).toLocaleTimeString('en-US', { hour12: false }) : 'N/A'
-            });
-          }
-        });
-        
-        // Update UI
-        updateStats();
-        updateRecentLog();
-        
-        console.log(`Loaded: ${legalCount} legal, ${illegalCount} illegal plates`);
-      } catch (e) {
-        console.error('Error loading existing detections:', e);
-      }
-    }
-
-    // ---- Webcam Control ----
-    toggleWebcamBtn.addEventListener('click', async () => {
-      console.log('Camera button clicked, isWebcamActive:', isWebcamActive);
-      
-      if (!isWebcamActive) {
-        try {
-          console.log('Requesting camera access...');
-          
-          // Check if getUserMedia is supported
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error('Camera access not supported in this browser. Please use Chrome, Edge, or Firefox.');
-          }
-          
-          webcamStream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 1280, height: 720 }
-          });
-          
-          console.log('Camera access granted, stream:', webcamStream);
-          
-          webcamVideo.srcObject = webcamStream;
-          webcamVideo.style.display = 'block';
-          staticImage.style.display = 'none';
-          isWebcamActive = true;
-          toggleWebcamBtn.textContent = 'videocam_off';
-          camName.textContent = 'Webcam Feed';
-          
-          // Wait for video to load and resize canvas
-          webcamVideo.addEventListener('loadedmetadata', () => {
-            console.log('Video metadata loaded, resizing canvas...');
-            resizeCanvas();
-          });
-          
-          console.log('Camera started successfully');
-        } catch (err) {
-          console.error('Camera error:', err);
-          
-          let errorMsg = 'Could not access webcam: ';
-          if (err.name === 'NotAllowedError') {
-            errorMsg += 'Permission denied. Please allow camera access.';
-          } else if (err.name === 'NotFoundError') {
-            errorMsg += 'No camera found.';
-          } else if (err.name === 'NotReadableError') {
-            errorMsg += 'Camera is in use by another application.';
-          } else {
-            errorMsg += err.message;
-          }
-          
-          alert(errorMsg + '\n\nTroubleshooting:\n1. Close other apps using camera\n2. Check browser permissions\n3. Try refreshing the page');
-        }
-      } else {
-        if (webcamStream) {
-          webcamStream.getTracks().forEach(track => track.stop());
-        }
-        webcamVideo.style.display = 'none';
-        staticImage.style.display = 'block';
-        isWebcamActive = false;
-        toggleWebcamBtn.textContent = 'videocam';
-        // Restore camera name from database
-        loadCameraInfo();
-
-        // Stop detection and clear canvas when webcam is turned off
-        stopDetection();
-        currentDetections = [];
-        drawDetections(currentDetections);
-        toggleDetectionBtn.textContent = 'play_circle';
-      }
-    });
-
-    // ---- Detection Control ----
-    toggleDetectionBtn.addEventListener('click', () => {
-      if (!isDetectionActive) {
-        // Clear any existing overlays before starting
-        currentDetections = [];
-        drawDetections(currentDetections);
-        startDetection();
-        toggleDetectionBtn.textContent = 'pause_circle';
-      } else {
-        stopDetection();
-        toggleDetectionBtn.textContent = 'play_circle';
-      }
-    });
-
-    function startDetection() {
-      isDetectionActive = true;
-      liveStats.style.display = 'block';
-      
-      // Don't clear existing data - keep what's already loaded from database
-      // seenPlates, legalCount, illegalCount, recentDetections are preserved
-      
-      updateStats();
-      updateRecentLog();
-
-      // Clear any existing detections on canvas
-      currentDetections = [];
-      detectionHistory = {}; 
-      drawDetections(currentDetections);
-      if (isWebcamActive) {
-        // Process webcam frames - Increased frequency to 400ms for responsiveness
-        detectionInterval = setInterval(processWebcamFrame, 400); 
-      } else {
-        // Show message that webcam is needed for real detection
-        alert('Please enable webcam to start real-time detection. Click the camera icon first.');
-        stopDetection();
-      }
-    }
-
-    function stopDetection() {
-      isDetectionActive = false;
-      liveStats.style.display = 'none';
-      if (detectionInterval) {
-        clearInterval(detectionInterval);
-        detectionInterval = null;
-      }
-      currentDetections = [];
-      detectionHistory = {};
-      drawDetections(currentDetections);
-    }
-
-    function updateStats() {
-      legalCountEl.textContent = legalCount;
-      illegalCountEl.textContent = illegalCount;
-      totalCountEl.textContent = legalCount + illegalCount;
-
-      // Update main stats cards
-      document.getElementById('totalPlatesScanned').textContent = legalCount + illegalCount;
-      document.getElementById('legalPlatesCount').textContent = legalCount;
-      document.getElementById('illegalPlatesCount').textContent = illegalCount;
-    }
-
-    function updateRecentLog() {
-      if (recentDetections.length === 0) {
-        recentLogEmpty.style.display = 'block';
-        recentLogTable.style.display = 'none';
+      if (!toggleWebcamBtn) {
+        console.error('ERROR: toggleWebcam button not found!');
+        alert('Error: Camera button not found. Please refresh the page.');
         return;
       }
+      const illegalCountEl = document.getElementById('illegalCount');
+      const totalCountEl = document.getElementById('totalCount');
+      const recentLogBody = document.getElementById('recentLogBody');
+      const recentLogTable = document.getElementById('recentLogTable');
+      const recentLogEmpty = document.getElementById('recentLogEmpty');
 
-      recentLogEmpty.style.display = 'none';
-      recentLogTable.style.display = 'block';
+      let webcamStream = null;
+      let isWebcamActive = false;
+      let isDetectionActive = false;
+      let detectionInterval = null;
+      let currentDetections = [];
+      let previousDetections = []; // For smoothing bbox jitter
+      let seenPlates = new Set();
+      let legalCount = 0;
+      let illegalCount = 0;
+      let recentDetections = [];
+      let detectionHistory = {}; // Missing: used for tracking
+      let nextTrackId = 0;       // Missing: used for track IDs
 
-      // Show last 10 detections
-      const recent = recentDetections.slice(-10).reverse();
-      recentLogBody.innerHTML = recent.map(det => {
-        const badgeClass = det.violation ? 'alert' : 'success';
-        const statusText = det.violation ? `ILLEGAL: ${det.violation}` : 'LEGAL';
-        const confidence = Math.round(det.confidence * 100);
-        
-        // Thumbnail logic
-        const thumbnailHtml = det.plate_image 
-          ? `<div class="plate-thumbnail"><img src="data:image/jpeg;base64,${det.plate_image}" alt="Plate" /></div>`
-          : `<div class="plate-thumbnail-placeholder">No Image</div>`;
+      // Load camera info and update display
+      async function loadCameraInfo() {
+        try {
+          const cameraId = RoadVisionAPI.getCurrentCameraId();
+          const camera = await RoadVisionAPI.Camera.get(cameraId);
+          if (camera) {
+            camName.textContent = `${camera.name} - ${camera.location}`;
+          }
+        } catch (e) {
+          console.error('Error loading camera info:', e);
+        }
+      }
 
-        return `
+      // Load camera info on page load
+      loadCameraInfo();
+
+      // Detection settings
+      const CONFIDENCE_THRESHOLD = 0.25; // Lowered to show more detections
+      const SMOOTHING_FACTOR = 0.5; // Smooth bbox movement (0-1, higher = more smoothing)
+      const IOU_THRESHOLD = 0.15; // IOU threshold for tracking (low = handles fast movement)
+
+      // ---- IOU-Based Tracking with Smooth Bbox ----
+      function calculateIOU(boxA, boxB) {
+        // boxes are [x%, y%, w%, h%] as percentages
+        const [ax, ay, aw, ah] = boxA;
+        const [bx, by, bw, bh] = boxB;
+
+        const x1 = Math.max(ax, bx);
+        const y1 = Math.max(ay, by);
+        const x2 = Math.min(ax + aw, bx + bw);
+        const y2 = Math.min(ay + ah, by + bh);
+
+        const intersection = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+        const areaA = aw * ah;
+        const areaB = bw * bh;
+        const union = areaA + areaB - intersection;
+
+        return union > 0 ? intersection / union : 0;
+      }
+
+
+      // ---- Plate Similarity Function ----
+      // Calculate Levenshtein distance between two strings
+      function levenshteinDistance(str1, str2) {
+        const matrix = [];
+        for (let i = 0; i <= str2.length; i++) {
+          matrix[i] = [i];
+        }
+        for (let j = 0; j <= str1.length; j++) {
+          matrix[0][j] = j;
+        }
+        for (let i = 1; i <= str2.length; i++) {
+          for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+              matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+              matrix[i][j] = Math.min(
+                matrix[i - 1][j - 1] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j] + 1
+              );
+            }
+          }
+        }
+        return matrix[str2.length][str1.length];
+      }
+
+      // Check if plate is similar to any seen plate (within 1 character difference)
+      function isSimilarToSeenPlate(newPlate) {
+        const threshold = 1; // Allow only 1 character difference (stricter)
+        for (const seenPlate of seenPlates) {
+          // Exact match
+          if (newPlate === seenPlate) {
+            return true;
+          }
+
+          // Similar length and small edit distance
+          if (Math.abs(newPlate.length - seenPlate.length) <= 1) {
+            const distance = levenshteinDistance(newPlate, seenPlate);
+            if (distance <= threshold) {
+              console.log(`Similar plate found: "${newPlate}" ≈ "${seenPlate}" (distance: ${distance})`);
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+
+      // Colors matching the design system
+      const COLORS = {
+        valid: { stroke: '#22C55E', fill: 'rgba(34,197,94,.15)', text: '#22C55E' },
+        violation: { stroke: '#EF4444', fill: 'rgba(239,68,68,.15)', text: '#EF4444' },
+        detecting: { stroke: '#3B82F6', fill: 'rgba(59,130,246,.15)', text: '#3B82F6' }
+      };
+
+      // ---- Canvas sizing ----
+      function resizeCanvas() {
+        // Match canvas to video element dimensions for accurate overlay
+        if (isWebcamActive && webcamVideo.videoWidth > 0) {
+          // Use actual video dimensions
+          canvas.width = webcamVideo.videoWidth;
+          canvas.height = webcamVideo.videoHeight;
+
+          // Scale canvas display to match viewer size
+          const rect = viewer.getBoundingClientRect();
+          canvas.style.width = rect.width + 'px';
+          canvas.style.height = rect.height + 'px';
+
+          console.log('Canvas sized to video:', canvas.width, 'x', canvas.height, 'display:', rect.width, 'x', rect.height);
+        } else {
+          // Fallback to viewer dimensions
+          const rect = viewer.getBoundingClientRect();
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+        }
+
+        if (currentDetections.length) drawDetections(currentDetections);
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('load', () => {
+        resizeCanvas();
+        // Load existing detection count from localStorage
+        loadExistingDetectionCount();
+      });
+
+      // ---- Load Existing Detection Count ----
+      async function loadExistingDetectionCount() {
+        try {
+          // Load existing detections from database for current camera
+          const detections = await RoadVisionAPI.Detection.getAll();
+          console.log(`Loading ${detections.length} existing detections from database`);
+
+          // Populate seenPlates, counts, and recent detections
+          seenPlates.clear();
+          legalCount = 0;
+          illegalCount = 0;
+          recentDetections = [];
+
+          detections.forEach(det => {
+            // Add to seen plates
+            if (det.detected_plate && det.detected_plate !== 'Detecting...') {
+              seenPlates.add(det.detected_plate);
+
+              // Update counts
+              if (det.violation) {
+                illegalCount++;
+              } else {
+                legalCount++;
+              }
+
+              // Add to recent detections (with timestamp)
+              recentDetections.push({
+                detected_plate: det.detected_plate,
+                violation: det.violation,
+                confidence: det.confidence,
+                time: det.timestamp ? new Date(det.timestamp).toLocaleTimeString('en-US', { hour12: false }) : 'N/A'
+              });
+            }
+          });
+
+          // Update UI
+          updateStats();
+          updateRecentLog();
+
+          console.log(`Loaded: ${legalCount} legal, ${illegalCount} illegal plates`);
+        } catch (e) {
+          console.error('Error loading existing detections:', e);
+        }
+      }
+
+      // ---- Webcam Control ----
+      toggleWebcamBtn.addEventListener('click', async () => {
+        console.log('Camera button clicked, isWebcamActive:', isWebcamActive);
+
+        if (!isWebcamActive) {
+          try {
+            console.log('Requesting camera access...');
+
+            // Check if getUserMedia is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+              throw new Error('Camera access not supported in this browser. Please use Chrome, Edge, or Firefox.');
+            }
+
+            webcamStream = await navigator.mediaDevices.getUserMedia({
+              video: { width: 1280, height: 720 }
+            });
+
+            console.log('Camera access granted, stream:', webcamStream);
+
+            webcamVideo.srcObject = webcamStream;
+            webcamVideo.style.display = 'block';
+            staticImage.style.display = 'none';
+            isWebcamActive = true;
+            toggleWebcamBtn.textContent = 'videocam_off';
+            camName.textContent = 'Webcam Feed';
+
+            // Wait for video to load and resize canvas
+            webcamVideo.addEventListener('loadedmetadata', () => {
+              console.log('Video metadata loaded, resizing canvas...');
+              resizeCanvas();
+            });
+
+            console.log('Camera started successfully');
+          } catch (err) {
+            console.error('Camera error:', err);
+
+            let errorMsg = 'Could not access webcam: ';
+            if (err.name === 'NotAllowedError') {
+              errorMsg += 'Permission denied. Please allow camera access.';
+            } else if (err.name === 'NotFoundError') {
+              errorMsg += 'No camera found.';
+            } else if (err.name === 'NotReadableError') {
+              errorMsg += 'Camera is in use by another application.';
+            } else {
+              errorMsg += err.message;
+            }
+
+            alert(errorMsg + '\n\nTroubleshooting:\n1. Close other apps using camera\n2. Check browser permissions\n3. Try refreshing the page');
+          }
+        } else {
+          if (webcamStream) {
+            webcamStream.getTracks().forEach(track => track.stop());
+          }
+          webcamVideo.style.display = 'none';
+          staticImage.style.display = 'block';
+          isWebcamActive = false;
+          toggleWebcamBtn.textContent = 'videocam';
+          // Restore camera name from database
+          loadCameraInfo();
+
+          // Stop detection and clear canvas when webcam is turned off
+          stopDetection();
+          currentDetections = [];
+          drawDetections(currentDetections);
+          toggleDetectionBtn.textContent = 'play_circle';
+        }
+      });
+
+      // ---- Detection Control ----
+      toggleDetectionBtn.addEventListener('click', () => {
+        if (!isDetectionActive) {
+          // Clear any existing overlays before starting
+          currentDetections = [];
+          drawDetections(currentDetections);
+          startDetection();
+          toggleDetectionBtn.textContent = 'pause_circle';
+        } else {
+          stopDetection();
+          toggleDetectionBtn.textContent = 'play_circle';
+        }
+      });
+
+      function startDetection() {
+        isDetectionActive = true;
+        liveStats.style.display = 'block';
+
+        // Don't clear existing data - keep what's already loaded from database
+        // seenPlates, legalCount, illegalCount, recentDetections are preserved
+
+        updateStats();
+        updateRecentLog();
+
+        // Clear any existing detections on canvas
+        currentDetections = [];
+        detectionHistory = {};
+        drawDetections(currentDetections);
+        if (isWebcamActive) {
+          // Process webcam frames - 800ms gap (optimized backend processes faster)
+          detectionInterval = setInterval(processWebcamFrame, 800);
+        } else {
+          // Show message that webcam is needed for real detection
+          alert('Please enable webcam to start real-time detection. Click the camera icon first.');
+          stopDetection();
+        }
+      }
+
+      function stopDetection() {
+        isDetectionActive = false;
+        liveStats.style.display = 'none';
+        if (detectionInterval) {
+          clearInterval(detectionInterval);
+          detectionInterval = null;
+        }
+        currentDetections = [];
+        detectionHistory = {};
+        drawDetections(currentDetections);
+      }
+
+      function updateStats() {
+        legalCountEl.textContent = legalCount;
+        illegalCountEl.textContent = illegalCount;
+        totalCountEl.textContent = legalCount + illegalCount;
+
+        // Update main stats cards
+        document.getElementById('totalPlatesScanned').textContent = legalCount + illegalCount;
+        document.getElementById('legalPlatesCount').textContent = legalCount;
+        document.getElementById('illegalPlatesCount').textContent = illegalCount;
+      }
+
+      function updateRecentLog() {
+        if (recentDetections.length === 0) {
+          recentLogEmpty.style.display = 'block';
+          recentLogTable.style.display = 'none';
+          return;
+        }
+
+        recentLogEmpty.style.display = 'none';
+        recentLogTable.style.display = 'block';
+
+        // Show last 10 detections
+        const recent = recentDetections.slice(-10).reverse();
+        recentLogBody.innerHTML = recent.map(det => {
+          const badgeClass = det.violation ? 'alert' : 'success';
+          const statusText = det.violation ? `ILLEGAL: ${det.violation}` : 'LEGAL';
+          const confidence = Math.round(det.confidence * 100);
+
+          // Thumbnail logic
+          const thumbnailHtml = det.plate_image
+            ? `<div class="plate-thumbnail"><img src="data:image/jpeg;base64,${det.plate_image}" alt="Plate" /></div>`
+            : `<div class="plate-thumbnail-placeholder">No Image</div>`;
+
+          return `
           <tr>
             <td><span class="plate-number">${det.detected_plate}</span></td>
             <td>${thumbnailHtml}</td>
@@ -619,389 +629,389 @@
             <td style="color:var(--text-muted)">${det.time}</td>
           </tr>
         `;
-      }).join('');
-    }
+        }).join('');
+      }
 
-    // ---- Process Webcam Frame ----
-    let isProcessingFrame = false; // Lock to prevent frame pileup
-    async function processWebcamFrame() {
-      if (!isWebcamActive || !webcamVideo.videoWidth) return;
-      if (isProcessingFrame) return; // Skip if still processing previous frame
-      isProcessingFrame = true;
+      // ---- Process Webcam Frame ----
+      let isProcessingFrame = false; // Lock to prevent frame pileup
+      async function processWebcamFrame() {
+        if (!isWebcamActive || !webcamVideo.videoWidth) return;
+        if (isProcessingFrame) return; // Skip if still processing previous frame
+        isProcessingFrame = true;
 
-      try {
-        console.log('Capturing frame from webcam...');
+        try {
+          console.log('Capturing frame from webcam...');
 
-        // Store original webcam dimensions
-        const originalWidth = webcamVideo.videoWidth;
-        const originalHeight = webcamVideo.videoHeight;
-        console.log('Original webcam resolution:', originalWidth, 'x', originalHeight);
+          // Store original webcam dimensions
+          const originalWidth = webcamVideo.videoWidth;
+          const originalHeight = webcamVideo.videoHeight;
+          console.log('Original webcam resolution:', originalWidth, 'x', originalHeight);
 
-        // Capture frame from video - resize for faster processing
-        const tempCanvas = document.createElement('canvas');
-        // Reduce resolution to 640x480 for faster processing
-        const targetWidth = 640;
-        const targetHeight = Math.round((webcamVideo.videoHeight / webcamVideo.videoWidth) * targetWidth);
-        tempCanvas.width = targetWidth;
-        tempCanvas.height = targetHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(webcamVideo, 0, 0, targetWidth, targetHeight);
+          // Capture frame from video - resize for faster processing
+          const tempCanvas = document.createElement('canvas');
+          // Reduce resolution to 640x480 for faster processing
+          const targetWidth = 640;
+          const targetHeight = Math.round((webcamVideo.videoHeight / webcamVideo.videoWidth) * targetWidth);
+          tempCanvas.width = targetWidth;
+          tempCanvas.height = targetHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(webcamVideo, 0, 0, targetWidth, targetHeight);
 
-        // Convert to blob - Higher quality 0.95
-        const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.95));
-        console.log('Frame captured, size:', blob.size, 'bytes, processing resolution:', targetWidth, 'x', targetHeight);
+          // Convert to blob - Higher quality 0.95
+          const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.95));
+          console.log('Frame captured, size:', blob.size, 'bytes, processing resolution:', targetWidth, 'x', targetHeight);
 
-        // Send to backend with original dimensions for correct bbox percentage calculation
-        const formData = new FormData();
-        formData.append('file', blob, 'frame.jpg');
-        formData.append('original_width', originalWidth.toString());
-        formData.append('original_height', originalHeight.toString());
-        // Pass camera_id so backend saves detection under correct camera
-        const camId = (window.RoadVisionAPI && RoadVisionAPI.getCurrentCameraId) ? RoadVisionAPI.getCurrentCameraId() : 'CAM-001';
-        formData.append('camera_id', camId);
+          // Send to backend with original dimensions for correct bbox percentage calculation
+          const formData = new FormData();
+          formData.append('file', blob, 'frame.jpg');
+          formData.append('original_width', originalWidth.toString());
+          formData.append('original_height', originalHeight.toString());
+          // Pass camera_id so backend saves detection under correct camera
+          const camId = (window.RoadVisionAPI && RoadVisionAPI.getCurrentCameraId) ? RoadVisionAPI.getCurrentCameraId() : 'CAM-001';
+          formData.append('camera_id', camId);
 
-        console.log('Sending frame to backend with original dimensions...');
-        const res = await fetch(RoadVisionConfig.getApiUrl('PROCESS_FRAME'), {
-          method: 'POST',
-          body: formData
-        });
+          console.log('Sending frame to backend with original dimensions...');
+          const res = await fetch(RoadVisionConfig.getApiUrl('PROCESS_FRAME'), {
+            method: 'POST',
+            body: formData
+          });
 
-        console.log('Backend response status:', res.status);
+          console.log('Backend response status:', res.status);
 
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error('Backend error:', errorText);
-          throw new Error('Backend error: ' + res.status);
-        }
-
-        const data = await res.json();
-        const nowMs = Date.now();
-        let incoming = data.detections || [];
-        
-        // 0. Deduplicate incoming (if YOLO sends overlapping boxes for same plate)
-        const dedupedIncoming = [];
-        incoming.sort((a, b) => b.confidence - a.confidence); // Prioritize high conf
-        incoming.forEach(newDet => {
-          let isDuplicate = false;
-          for (const existing of dedupedIncoming) {
-            if (calculateIOU(newDet.bbox, existing.bbox) > 0.7) {
-              isDuplicate = true;
-              break;
-            }
-          }
-          if (!isDuplicate) dedupedIncoming.push(newDet);
-        });
-        incoming = dedupedIncoming;
-
-        // Match incoming detections with history using IOU
-        const unmatchedHistory = new Set(Object.keys(detectionHistory));
-        const matchedIncoming = new Set();
-
-        const IOU_THRESHOLD = 0.3;
-
-        // 1. Try to match incoming to history
-        incoming.forEach((newDet, newIdx) => {
-          let bestMatch = null;
-          let bestIOU = 0;
-
-          for (const trackId in detectionHistory) {
-            const iou = calculateIOU(newDet.bbox, detectionHistory[trackId].bbox);
-            if (iou > bestIOU && iou > IOU_THRESHOLD) {
-              bestIOU = iou;
-              bestMatch = trackId;
-            }
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error('Backend error:', errorText);
+            throw new Error('Backend error: ' + res.status);
           }
 
-          if (bestMatch) {
-            const hist = detectionHistory[bestMatch];
-            hist.framesSeen = (hist.framesSeen || 0) + 1;
-            
-            // Smoothing bbox (Weighted moving average: 70% new, 30% old)
-            hist.bbox = hist.bbox.map((v, i) => (v * 0.3) + (newDet.bbox[i] * 0.7));
-            
-            // Add new OCR result to variants for consensus
-            if (newDet.detected_plate && newDet.detected_plate !== 'Detecting...') {
-              hist.variants.push({ text: newDet.detected_plate, conf: newDet.confidence || 0.5 });
-              hist.lastOcrUpdate = nowMs;
-              // Keep only last 10 variants
-              if (hist.variants.length > 10) hist.variants.shift();
-              
-              // Vote for best text (highest frequency, weighted by confidence)
-              const votes = {};
-              hist.variants.forEach(v => {
-                votes[v.text] = (votes[v.text] || 0) + v.conf;
-              });
-              let topText = hist.text;
-              let topScore = 0;
-              for (const t in votes) {
-                if (votes[t] > topScore) {
-                  topScore = votes[t];
-                  topText = t;
+          const data = await res.json();
+          const nowMs = Date.now();
+          let incoming = data.detections || [];
+
+          // 0. Deduplicate incoming (if YOLO sends overlapping boxes for same plate)
+          const dedupedIncoming = [];
+          incoming.sort((a, b) => b.confidence - a.confidence); // Prioritize high conf
+          incoming.forEach(newDet => {
+            let isDuplicate = false;
+            for (const existing of dedupedIncoming) {
+              if (calculateIOU(newDet.bbox, existing.bbox) > 0.7) {
+                isDuplicate = true;
+                break;
+              }
+            }
+            if (!isDuplicate) dedupedIncoming.push(newDet);
+          });
+          incoming = dedupedIncoming;
+
+          // Match incoming detections with history using IOU
+          const unmatchedHistory = new Set(Object.keys(detectionHistory));
+          const matchedIncoming = new Set();
+
+          const IOU_THRESHOLD = 0.3;
+
+          // 1. Try to match incoming to history
+          incoming.forEach((newDet, newIdx) => {
+            let bestMatch = null;
+            let bestIOU = 0;
+
+            for (const trackId in detectionHistory) {
+              const iou = calculateIOU(newDet.bbox, detectionHistory[trackId].bbox);
+              if (iou > bestIOU && iou > IOU_THRESHOLD) {
+                bestIOU = iou;
+                bestMatch = trackId;
+              }
+            }
+
+            if (bestMatch) {
+              const hist = detectionHistory[bestMatch];
+              hist.framesSeen = (hist.framesSeen || 0) + 1;
+
+              // Smoothing bbox (Weighted moving average: 70% new, 30% old)
+              hist.bbox = hist.bbox.map((v, i) => (v * 0.3) + (newDet.bbox[i] * 0.7));
+
+              // Add new OCR result to variants for consensus
+              if (newDet.detected_plate && newDet.detected_plate !== 'Detecting...') {
+                hist.variants.push({ text: newDet.detected_plate, conf: newDet.confidence || 0.5 });
+                hist.lastOcrUpdate = nowMs;
+                // Keep only last 10 variants
+                if (hist.variants.length > 10) hist.variants.shift();
+
+                // Vote for best text (highest frequency, weighted by confidence)
+                const votes = {};
+                hist.variants.forEach(v => {
+                  votes[v.text] = (votes[v.text] || 0) + v.conf;
+                });
+                let topText = hist.text;
+                let topScore = 0;
+                for (const t in votes) {
+                  if (votes[t] > topScore) {
+                    topScore = votes[t];
+                    topText = t;
+                  }
                 }
+                hist.text = topText;
               }
-              hist.text = topText;
+
+              hist.lastSeen = nowMs;
+              hist.violation = newDet.violation;
+              unmatchedHistory.delete(bestMatch);
+              matchedIncoming.add(newIdx);
+            }
+          });
+
+          // 2. Create new tracks for unmatched incoming
+          incoming.forEach((newDet, idx) => {
+            if (matchedIncoming.has(idx)) return;
+
+            const trackId = `track_${nextTrackId++}`;
+            detectionHistory[trackId] = {
+              ...newDet,
+              text: newDet.detected_plate || 'Detecting...',
+              variants: newDet.detected_plate ? [{ text: newDet.detected_plate, conf: newDet.confidence || 0.5 }] : [],
+              lastSeen: nowMs,
+              framesSeen: 1,
+              lastOcrUpdate: newDet.detected_plate ? nowMs : 0
+            };
+          });
+
+          // 3. Cleanup and build current display list
+          currentDetections = [];
+          for (const trackId in detectionHistory) {
+            const d = detectionHistory[trackId];
+            const timeSinceSeen = nowMs - d.lastSeen;
+            const timeSinceOcr = d.lastOcrUpdate ? nowMs - d.lastOcrUpdate : 999999;
+
+            // PRUNING RULES:
+            // 1. Delete if not seen for 1.2s
+            if (timeSinceSeen > 1200) {
+              delete detectionHistory[trackId];
+              continue;
             }
 
-            hist.lastSeen = nowMs;
-            hist.violation = newDet.violation;
-            unmatchedHistory.delete(bestMatch);
-            matchedIncoming.add(newIdx);
-          }
-        });
+            // 2. Delete if it's been "Detecting..." for too many frames without success (False Positive Filter)
+            if (d.text === 'Detecting...' && d.framesSeen > 6) {
+              delete detectionHistory[trackId];
+              continue;
+            }
 
-        // 2. Create new tracks for unmatched incoming
-        incoming.forEach((newDet, idx) => {
-          if (matchedIncoming.has(idx)) return;
-          
-          const trackId = `track_${nextTrackId++}`;
-          detectionHistory[trackId] = {
-            ...newDet,
-            text: newDet.detected_plate || 'Detecting...',
-            variants: newDet.detected_plate ? [{ text: newDet.detected_plate, conf: newDet.confidence || 0.5 }] : [],
-            lastSeen: nowMs,
-            framesSeen: 1,
-            lastOcrUpdate: newDet.detected_plate ? nowMs : 0
-          };
-        });
-
-        // 3. Cleanup and build current display list
-        currentDetections = [];
-        for (const trackId in detectionHistory) {
-          const d = detectionHistory[trackId];
-          const timeSinceSeen = nowMs - d.lastSeen;
-          const timeSinceOcr = d.lastOcrUpdate ? nowMs - d.lastOcrUpdate : 999999;
-          
-          // PRUNING RULES:
-          // 1. Delete if not seen for 1.2s
-          if (timeSinceSeen > 1200) {
-            delete detectionHistory[trackId];
-            continue;
-          }
-
-          // 2. Delete if it's been "Detecting..." for too many frames without success (False Positive Filter)
-          if (d.text === 'Detecting...' && d.framesSeen > 6) {
-            delete detectionHistory[trackId];
-            continue;
-          }
-
-          // DISPLAY RULES:
-          // Only show boxes that have been seen for at least 2 frames (improved responsiveness)
-          // OR boxes that already have a successful OCR read with high frequency
-          if (d.framesSeen >= 2 || (d.text !== 'Detecting...' && d.variants.length >= 2)) {
-            currentDetections.push({
-              ...d,
-              detected_plate: d.text
-            });
-          }
-        }
-
-        // Update counts (only when text first becomes "Legal" or "Illegal")
-        incoming.forEach(det => {
-          if (det.detected_plate && det.detected_plate !== 'Detecting...') {
-            // Check if this plate is similar to any already seen plate
-            if (!seenPlates.has(det.detected_plate) && !isSimilarToSeenPlate(det.detected_plate)) {
-              seenPlates.add(det.detected_plate);
-
-              // Add to recent detections log
-              const now = new Date();
-              const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
-              recentDetections.push({
-                detected_plate: det.detected_plate,
-                plate_image: det.plate_image, // Base64 from backend
-                violation: det.violation,
-                confidence: det.confidence,
-                time: timeStr
+            // DISPLAY RULES:
+            // Only show boxes that have been seen for at least 2 frames (improved responsiveness)
+            // OR boxes that already have a successful OCR read with high frequency
+            if (d.framesSeen >= 2 || (d.text !== 'Detecting...' && d.variants.length >= 2)) {
+              currentDetections.push({
+                ...d,
+                detected_plate: d.text
               });
-
-              // Save to localStorage for detections and history pages
-              saveDetectionToStorage(det);
-
-              if (det.violation) {
-                illegalCount++;
-              } else {
-                legalCount++;
-              }
-              updateStats();
-              updateRecentLog();
-              console.log('New plate detected:', det.detected_plate, det.violation ? 'ILLEGAL' : 'LEGAL');
-            } else {
-              console.log('Duplicate/similar plate ignored:', det.detected_plate);
             }
+          }
+
+          // Update counts (only when text first becomes "Legal" or "Illegal")
+          incoming.forEach(det => {
+            if (det.detected_plate && det.detected_plate !== 'Detecting...') {
+              // Check if this plate is similar to any already seen plate
+              if (!seenPlates.has(det.detected_plate) && !isSimilarToSeenPlate(det.detected_plate)) {
+                seenPlates.add(det.detected_plate);
+
+                // Add to recent detections log
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+                recentDetections.push({
+                  detected_plate: det.detected_plate,
+                  plate_image: det.plate_image, // Base64 from backend
+                  violation: det.violation,
+                  confidence: det.confidence,
+                  time: timeStr
+                });
+
+                // Save to localStorage for detections and history pages
+                saveDetectionToStorage(det);
+
+                if (det.violation) {
+                  illegalCount++;
+                } else {
+                  legalCount++;
+                }
+                updateStats();
+                updateRecentLog();
+                console.log('New plate detected:', det.detected_plate, det.violation ? 'ILLEGAL' : 'LEGAL');
+              } else {
+                console.log('Duplicate/similar plate ignored:', det.detected_plate);
+              }
+            }
+          });
+
+          drawDetections(currentDetections);
+
+        } catch (err) {
+          console.error('Frame processing error:', err);
+        } finally {
+          isProcessingFrame = false; // Release lock
+        }
+      }
+
+      // ---- Save Detection to localStorage ----
+      async function saveDetectionToStorage(detection) {
+        try {
+          console.log('Attempting to save detection:', detection);
+
+          // Detection already has plate_image from backend, just save it
+          const result = await RoadVisionAPI.Detection.add(detection);
+          console.log('Detection saved successfully:', result);
+
+          // Note: We don't need to capture evidence frame separately anymore
+          // because the backend already provides plate_image in the detection
+        } catch (e) {
+          console.error('Error saving detection to database:', e);
+          console.error('Detection that failed to save:', detection);
+        }
+      }
+
+      // ---- Capture and Save Evidence Frame ----
+      function captureAndSaveEvidence(detection) {
+        try {
+          // Capture current webcam frame as evidence
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = webcamVideo.videoWidth;
+          tempCanvas.height = webcamVideo.videoHeight;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(webcamVideo, 0, 0);
+
+          // Convert to data URL
+          const evidenceDataUrl = tempCanvas.toDataURL('image/jpeg', 0.8);
+
+          // Save evidence using the evidence-store.js component
+          if (typeof saveEvidence === 'function') {
+            saveEvidence(detection, evidenceDataUrl);
+            console.log('Saved evidence frame for:', detection.detected_plate);
+          }
+        } catch (e) {
+          console.error('Error capturing evidence frame:', e);
+        }
+      }
+
+      // ---- Drawing logic ----
+      function drawDetections(detections) {
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Clear the canvas
+        ctx.clearRect(0, 0, w, h);
+
+        detections.forEach((det) => {
+          if (!det.bbox || det.bbox.length < 4) return;
+
+          // bbox values are percentages: [x%, y%, width%, height%]
+          const x = (det.bbox[0] / 100) * w;
+          const y = (det.bbox[1] / 100) * h;
+          const bw = (det.bbox[2] / 100) * w;
+          const bh = (det.bbox[3] / 100) * h;
+
+          const isViolation = !!det.violation;
+          const isDetecting = !det.detected_plate || det.detected_plate === 'Detecting...';
+          const palette = isDetecting ? COLORS.detecting : (isViolation ? COLORS.violation : COLORS.valid);
+
+          // Draw semi-transparent fill
+          ctx.fillStyle = palette.fill;
+          ctx.fillRect(x, y, bw, bh);
+
+          // Draw clean border with rounded corners
+          ctx.strokeStyle = palette.stroke;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.roundRect(x, y, bw, bh, 4);
+          ctx.stroke();
+
+          // Label background
+          const label = det.detected_plate || 'Unknown';
+          const status = isDetecting ? 'DETECTING' : (isViolation ? `ILLEGAL: ${det.violation}` : 'LEGAL');
+
+          ctx.font = 'bold 13px Inter, sans-serif';
+          const textMetrics = ctx.measureText(label);
+          ctx.font = 'bold 10px Inter, sans-serif';
+          const statusMetrics = ctx.measureText(status);
+          const labelW = Math.max(textMetrics.width, statusMetrics.width) + 20;
+          const labelH = 40;
+          const labelX = x;
+          const labelY = y - labelH - 4;
+
+          // Draw label background with shadow
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+          ctx.shadowBlur = 8;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 2;
+
+          ctx.fillStyle = palette.stroke;
+          ctx.beginPath();
+          ctx.roundRect(labelX, labelY, labelW, labelH, [6, 6, 0, 0]);
+          ctx.fill();
+
+          // Reset shadow
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+
+          // Draw plate number
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 13px Inter, sans-serif';
+          ctx.textBaseline = 'top';
+          ctx.fillText(label, labelX + 10, labelY + 8);
+
+          // Draw status (LEGAL/ILLEGAL)
+          ctx.font = 'bold 10px Inter, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          ctx.fillText(status, labelX + 10, labelY + 24);
+
+          // Add icon
+          if (!isDetecting) {
+            const icon = isViolation ? '⚠' : '✓';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(icon, labelX + labelW - 20, labelY + 14);
+          }
+        });
+      }
+
+      // ---- Fullscreen Toggle ----
+      const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
+      if (toggleFullscreenBtn) {
+        toggleFullscreenBtn.addEventListener('click', () => {
+          if (!document.fullscreenElement) {
+            // Enter fullscreen on the viewer container
+            const target = viewer;
+            if (target.requestFullscreen) {
+              target.requestFullscreen();
+            } else if (target.webkitRequestFullscreen) {
+              target.webkitRequestFullscreen();
+            } else if (target.msRequestFullscreen) {
+              target.msRequestFullscreen();
+            }
+            toggleFullscreenBtn.textContent = 'fullscreen_exit';
+          } else {
+            if (document.exitFullscreen) {
+              document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+              document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+              document.msExitFullscreen();
+            }
+            toggleFullscreenBtn.textContent = 'fullscreen';
           }
         });
 
-        drawDetections(currentDetections);
-
-      } catch (err) {
-        console.error('Frame processing error:', err);
-      } finally {
-        isProcessingFrame = false; // Release lock
-      }
-    }
-
-    // ---- Save Detection to localStorage ----
-    async function saveDetectionToStorage(detection) {
-      try {
-        console.log('Attempting to save detection:', detection);
-        
-        // Detection already has plate_image from backend, just save it
-        const result = await RoadVisionAPI.Detection.add(detection);
-        console.log('Detection saved successfully:', result);
-        
-        // Note: We don't need to capture evidence frame separately anymore
-        // because the backend already provides plate_image in the detection
-      } catch (e) {
-        console.error('Error saving detection to database:', e);
-        console.error('Detection that failed to save:', detection);
-      }
-    }
-
-    // ---- Capture and Save Evidence Frame ----
-    function captureAndSaveEvidence(detection) {
-      try {
-        // Capture current webcam frame as evidence
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = webcamVideo.videoWidth;
-        tempCanvas.height = webcamVideo.videoHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(webcamVideo, 0, 0);
-
-        // Convert to data URL
-        const evidenceDataUrl = tempCanvas.toDataURL('image/jpeg', 0.8);
-
-        // Save evidence using the evidence-store.js component
-        if (typeof saveEvidence === 'function') {
-          saveEvidence(detection, evidenceDataUrl);
-          console.log('Saved evidence frame for:', detection.detected_plate);
-        }
-      } catch (e) {
-        console.error('Error capturing evidence frame:', e);
-      }
-    }
-
-    // ---- Drawing logic ----
-    function drawDetections(detections) {
-      const w = canvas.width;
-      const h = canvas.height;
-
-      // Clear the canvas
-      ctx.clearRect(0, 0, w, h);
-
-      detections.forEach((det) => {
-        if (!det.bbox || det.bbox.length < 4) return;
-
-        // bbox values are percentages: [x%, y%, width%, height%]
-        const x = (det.bbox[0] / 100) * w;
-        const y = (det.bbox[1] / 100) * h;
-        const bw = (det.bbox[2] / 100) * w;
-        const bh = (det.bbox[3] / 100) * h;
-
-        const isViolation = !!det.violation;
-        const isDetecting = !det.detected_plate || det.detected_plate === 'Detecting...';
-        const palette = isDetecting ? COLORS.detecting : (isViolation ? COLORS.violation : COLORS.valid);
-
-        // Draw semi-transparent fill
-        ctx.fillStyle = palette.fill;
-        ctx.fillRect(x, y, bw, bh);
-
-        // Draw clean border with rounded corners
-        ctx.strokeStyle = palette.stroke;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.roundRect(x, y, bw, bh, 4);
-        ctx.stroke();
-
-        // Label background
-        const label = det.detected_plate || 'Unknown';
-        const status = isDetecting ? 'DETECTING' : (isViolation ? `ILLEGAL: ${det.violation}` : 'LEGAL');
-
-        ctx.font = 'bold 13px Inter, sans-serif';
-        const textMetrics = ctx.measureText(label);
-        ctx.font = 'bold 10px Inter, sans-serif';
-        const statusMetrics = ctx.measureText(status);
-        const labelW = Math.max(textMetrics.width, statusMetrics.width) + 20;
-        const labelH = 40;
-        const labelX = x;
-        const labelY = y - labelH - 4;
-
-        // Draw label background with shadow
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 2;
-        
-        ctx.fillStyle = palette.stroke;
-        ctx.beginPath();
-        ctx.roundRect(labelX, labelY, labelW, labelH, [6, 6, 0, 0]);
-        ctx.fill();
-        
-        // Reset shadow
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-
-        // Draw plate number
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 13px Inter, sans-serif';
-        ctx.textBaseline = 'top';
-        ctx.fillText(label, labelX + 10, labelY + 8);
-
-        // Draw status (LEGAL/ILLEGAL)
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillText(status, labelX + 10, labelY + 24);
-
-        // Add icon
-        if (!isDetecting) {
-          const icon = isViolation ? '⚠' : '✓';
-          ctx.font = 'bold 14px Arial';
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(icon, labelX + labelW - 20, labelY + 14);
-        }
-      });
-    }
-
-    // ---- Fullscreen Toggle ----
-    const toggleFullscreenBtn = document.getElementById('toggleFullscreen');
-    if (toggleFullscreenBtn) {
-      toggleFullscreenBtn.addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-          // Enter fullscreen on the viewer container
-          const target = viewer;
-          if (target.requestFullscreen) {
-            target.requestFullscreen();
-          } else if (target.webkitRequestFullscreen) {
-            target.webkitRequestFullscreen();
-          } else if (target.msRequestFullscreen) {
-            target.msRequestFullscreen();
+        // Update icon when exiting fullscreen via Escape key
+        document.addEventListener('fullscreenchange', () => {
+          if (!document.fullscreenElement) {
+            toggleFullscreenBtn.textContent = 'fullscreen';
+            resizeCanvas();
+          } else {
+            toggleFullscreenBtn.textContent = 'fullscreen_exit';
+            resizeCanvas();
           }
-          toggleFullscreenBtn.textContent = 'fullscreen_exit';
-        } else {
-          if (document.exitFullscreen) {
-            document.exitFullscreen();
-          } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-          } else if (document.msExitFullscreen) {
-            document.msExitFullscreen();
-          }
-          toggleFullscreenBtn.textContent = 'fullscreen';
-        }
-      });
+        });
+      }
 
-      // Update icon when exiting fullscreen via Escape key
-      document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement) {
-          toggleFullscreenBtn.textContent = 'fullscreen';
-          resizeCanvas();
-        } else {
-          toggleFullscreenBtn.textContent = 'fullscreen_exit';
-          resizeCanvas();
-        }
-      });
-    }
-    
     } // End of initMonitoringPage()
   </script>
 </body>

@@ -63,6 +63,16 @@ DIGIT_TO_LETTER = {
     '7': 'T',
 }
 
+# Common OCR letter-to-letter confusions (used for state code correction)
+# Key = common OCR error, Value = list of likely intended characters
+LETTER_CONFUSION = {
+    'M': 'N',
+    'N': 'M',
+    'E': 'B',
+    'F': 'P',
+    'V': 'U',
+}
+
 # Valid Indian state codes
 VALID_STATE_CODES = {
     'AN', 'AP', 'AR', 'AS', 'BR', 'CG', 'CH', 'DD', 'DL', 'GA',
@@ -145,6 +155,28 @@ def smart_normalize(plate: str) -> tuple:
         if ch.isdigit() and ch in DIGIT_TO_LETTER:
             corrected[i] = DIGIT_TO_LETTER[ch]
             corrections.append((i, ch, corrected[i]))
+
+    # State-code-specific correction (e.g., TM -> TN)
+    if len(corrected) >= 2:
+        state = "".join(corrected[:2])
+        if state not in VALID_STATE_CODES:
+            # Try to fix state code using common letter confusions
+            s0, s1 = corrected[0], corrected[1]
+            
+            # Case 1: First char confused (e.g., M... -> N...)
+            if s0 in LETTER_CONFUSION:
+                test_state = LETTER_CONFUSION[s0] + s1
+                if test_state in VALID_STATE_CODES:
+                    corrected[0] = LETTER_CONFUSION[s0]
+                    corrections.append((0, s0, corrected[0]))
+                    state = test_state
+            
+            # Case 2: Second char confused (e.g., TM -> TN)
+            if state not in VALID_STATE_CODES and s1 in LETTER_CONFUSION:
+                test_state = s0 + LETTER_CONFUSION[s1]
+                if test_state in VALID_STATE_CODES:
+                    corrected[1] = LETTER_CONFUSION[s1]
+                    corrections.append((1, s1, corrected[1]))
 
     # --- Positions 2-3: MUST be digits (district code) ---
     for i in range(2, min(4, len(plate))):

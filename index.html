@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RoadVision — Dashboard</title>
   <meta name="description"
@@ -321,7 +322,7 @@
         const formData = new FormData();
         formData.append('video', uploadedFile);
 
-        const response = await fetch('http://localhost:8001/analyze-video', {
+        const response = await fetch('http://localhost:8000/analyze-video', {
           method: 'POST',
           body: formData
         });
@@ -363,7 +364,7 @@
             <span class="material-symbols-outlined" style="font-size:48px; color:var(--alert); display:block; margin-bottom:12px;">error</span>
             <p style="font-size:15px; font-weight:600; color:var(--text-primary); margin-bottom:6px;">Analysis failed</p>
             <p style="font-size:13px; color:var(--text-muted);">${err.message}</p>
-            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Check that the backend is running at http://localhost:8001</p>
+            <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Check that the backend is running at http://localhost:8000</p>
           </div>
         `;
       }

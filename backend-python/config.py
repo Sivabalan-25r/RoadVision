@@ -40,7 +40,7 @@ BOTSORT_IOU_THRESHOLD = 0.1  # Intersection-over-union threshold for matching
 # ============================================================================
 
 OCR_CONFIDENCE_THRESHOLD = 0.25  # Minimum confidence to accept OCR result
-OCR_FALLBACK_CHAIN = ["paddleocr", "crnn", "easyocr", "tesseract"]
+OCR_FALLBACK_CHAIN = ["paddleocr", "easyocr", "tesseract"]
 
 # OCR character corrections
 OCR_CORRECTIONS = {
@@ -75,7 +75,7 @@ KNOWN_FALSE_POSITIVES = {
 # Stabilization Configuration
 # ============================================================================
 
-STABILIZATION_FRAMES = 2  # Require N frames for confirmation
+STABILIZATION_FRAMES = 1  # Require N frames for confirmation
 TRACKER_EXPIRY_SECONDS = 30  # Expire tracker entries after N seconds
 
 # ============================================================================
@@ -117,21 +117,52 @@ def load_env_overrides():
     
     global YOLO_CONFIDENCE_THRESHOLD, OCR_CONFIDENCE_THRESHOLD
     global STABILIZATION_FRAMES, LEVENSHTEIN_THRESHOLD, FRAME_INTERVAL
+    global MIN_PLATE_AREA, MAX_PLATE_AREA, BOTSORT_MAX_AGE
+    global YOLO_IMAGE_SIZE, TARGET_PLATE_WIDTH, TARGET_PLATE_HEIGHT
     
-    if os.getenv('YOLO_CONF'):
-        YOLO_CONFIDENCE_THRESHOLD = float(os.getenv('YOLO_CONF'))
-    
-    if os.getenv('OCR_CONF'):
-        OCR_CONFIDENCE_THRESHOLD = float(os.getenv('OCR_CONF'))
-    
-    if os.getenv('STABILIZATION_FRAMES'):
-        STABILIZATION_FRAMES = int(os.getenv('STABILIZATION_FRAMES'))
-    
-    if os.getenv('LEVENSHTEIN_THRESHOLD'):
-        LEVENSHTEIN_THRESHOLD = int(os.getenv('LEVENSHTEIN_THRESHOLD'))
-    
-    if os.getenv('FRAME_INTERVAL'):
-        FRAME_INTERVAL = int(os.getenv('FRAME_INTERVAL'))
+    def get_env_float(name, default):
+        val = os.getenv(name)
+        return float(val) if val is not None else default
 
-# Load environment overrides on import
+    def get_env_int(name, default):
+        val = os.getenv(name)
+        return int(val) if val is not None else default
+
+    YOLO_CONFIDENCE_THRESHOLD = get_env_float('YOLO_CONF', YOLO_CONFIDENCE_THRESHOLD)
+    OCR_CONFIDENCE_THRESHOLD = get_env_float('OCR_CONF', OCR_CONFIDENCE_THRESHOLD)
+    STABILIZATION_FRAMES = get_env_int('STABILIZATION_FRAMES', STABILIZATION_FRAMES)
+    LEVENSHTEIN_THRESHOLD = get_env_int('LEVENSHTEIN_THRESHOLD', LEVENSHTEIN_THRESHOLD)
+    FRAME_INTERVAL = get_env_int('FRAME_INTERVAL', FRAME_INTERVAL)
+    MIN_PLATE_AREA = get_env_int('MIN_PLATE_AREA', MIN_PLATE_AREA)
+    MAX_PLATE_AREA = get_env_int('MAX_PLATE_AREA', MAX_PLATE_AREA)
+    BOTSORT_MAX_AGE = get_env_int('BOTSORT_MAX_AGE', BOTSORT_MAX_AGE)
+    YOLO_IMAGE_SIZE = get_env_int('YOLO_IMAGE_SIZE', YOLO_IMAGE_SIZE)
+    TARGET_PLATE_WIDTH = get_env_int('TARGET_PLATE_WIDTH', TARGET_PLATE_WIDTH)
+    TARGET_PLATE_HEIGHT = get_env_int('TARGET_PLATE_HEIGHT', TARGET_PLATE_HEIGHT)
+
+def validate_config():
+    """Verify that configuration parameters are within sane limits."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    errors = []
+    if not (0.0 <= YOLO_CONFIDENCE_THRESHOLD <= 1.0):
+        errors.append(f"YOLO_CONFIDENCE_THRESHOLD must be 0-1 (got {YOLO_CONFIDENCE_THRESHOLD})")
+    if not (0.0 <= OCR_CONFIDENCE_THRESHOLD <= 1.0):
+        errors.append(f"OCR_CONFIDENCE_THRESHOLD must be 0-1 (got {OCR_CONFIDENCE_THRESHOLD})")
+    if STABILIZATION_FRAMES < 1:
+        errors.append(f"STABILIZATION_FRAMES must be >= 1 (got {STABILIZATION_FRAMES})")
+    if FRAME_INTERVAL < 1:
+        errors.append(f"FRAME_INTERVAL must be >= 1 (got {FRAME_INTERVAL})")
+    
+    if errors:
+        for err in errors:
+            logger.error(f"Config Error: {err}")
+        return False
+    
+    logger.info("Configuration validated successfully")
+    return True
+
+# Load environment overrides and validate on import
 load_env_overrides()
+validate_config()

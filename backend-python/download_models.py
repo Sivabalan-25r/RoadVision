@@ -11,7 +11,7 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), 'models')
 # Model URLs from known public sources
 MODEL_URLS = {
     'license_plate_detector.pt': 'https://huggingface.co/keremberke/yolov8-license-plate/resolve/main/best.pt',
-    'yolov8n.pt': 'https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8n.pt'
+    'license_plate_detector.pt': 'https://huggingface.co/keremberke/yolov8-license-plate/resolve/main/best.pt',
 }
 
 def download_file(url, target_path):
@@ -41,14 +41,6 @@ def main():
             logger.info(f"✗ {filename} is missing.")
             download_file(url, target_path)
 
-    # Note on CRNN.pth
-    crnn_path = os.path.join(MODELS_DIR, 'crnn.pth')
-    if not os.path.exists(crnn_path):
-        logger.warning("-" * 60)
-        logger.warning("NOTE: 'crnn.pth' (Custom CRNN weights) is not available via direct URL.")
-        logger.warning("The system will automatically fall back to PaddleOCR / EasyOCR / Tesseract.")
-        logger.warning(f"If you have custom weights, place them at: {crnn_path}")
-        logger.warning("-" * 60)
 
     logger.info("Done!")
 

@@ -15,13 +15,15 @@ import numpy as np
 from recognition.plate_reader import detect_plates
 from tracking.botsort_tracker import BoTSORTTracker
 
+from typing import List, Tuple
+
 logger = logging.getLogger(__name__)
 
 
 def process_video(
     video_path: str,
     frame_interval: int = 5,
-) -> List[dict]:
+) -> Tuple[List[dict], int, int]:
     """
     Process a video file: extract frames, detect plates, track objects, return detections.
 
@@ -35,7 +37,7 @@ def process_video(
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         logger.error(f"Cannot open video: {video_path}")
-        return []
+        return [], 0, 0
 
     # Initialize BoT-SORT tracker at video start
     tracker = BoTSORTTracker()
@@ -71,7 +73,9 @@ def process_video(
     logger.info(
         f"Processed {frame_number} frames, found {len(all_detections)} plate candidates"
     )
-    return all_detections
+    # processed_count is number of frames actually sent to YOLO
+    processed_count = (frame_number // frame_interval) + 1
+    return all_detections, frame_number, processed_count
 
 
 def save_upload_to_temp(file_bytes: bytes, suffix: str = '.mp4') -> str:

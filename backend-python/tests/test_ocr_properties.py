@@ -498,12 +498,14 @@ class TestEnsembleOCRSelectionProperties:
             image = np.zeros((40, 120, 3), dtype=np.uint8)
             result = plate_reader_module.read_plate(image)
 
+        # read_plate returns (text, confidence) tuple
+        result_text, result_conf = result
         # The result must be the text with the highest confidence
         expected_text = texts[confidences.index(max(confidences))]
-        assert result == expected_text, (
+        assert result_text == expected_text, (
             f"Ensemble must select highest confidence variant. "
             f"Expected '{expected_text}' (conf={max(confidences):.3f}), "
-            f"got '{result}'"
+            f"got '{result_text}'"
         )
 
     def test_property_7_ensemble_returns_none_when_all_variants_fail(self):
@@ -528,8 +530,8 @@ class TestEnsembleOCRSelectionProperties:
             image = np.zeros((40, 120, 3), dtype=np.uint8)
             result = plate_reader_module.read_plate(image)
 
-        assert result is None, (
-            f"When all variants fail, read_plate() must return None, got '{result}'"
+        assert result is None or result == (None, 0.0), (
+            f"When all variants fail, read_plate() must return None or (None, 0.0), got '{result}'"
         )
 
     def test_property_7_ensemble_generates_four_variants(self):

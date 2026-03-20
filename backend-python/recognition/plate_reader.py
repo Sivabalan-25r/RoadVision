@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Tuple, List, Any, Dict, Union, cast
 
 # Ensure backend-python is in path for local imports
@@ -26,11 +27,6 @@ try:
 except ImportError:
     pass
 
-try:
-    from recognition.crnn_recognizer import recognize_plate # type: ignore
-except ImportError:
-    # Fallback for linter/environment issues
-    def recognize_plate(p, v): return ("", 0.0)
 
 # Import centralized configuration
 import config
@@ -110,7 +106,6 @@ def load_plate_model():
     
     # Log model parameters and configuration
     try:
-        # Get model parameter count
         param_count = sum(p.numel() for p in _plate_model.model.parameters())
         param_count_m = param_count / 1_000_000
         
@@ -231,9 +226,9 @@ def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
         logger.debug(f"PaddleOCR returned no results (inference: {inference_time:.1f}ms)")
         return ("", 0.0)
 
-    # Collect all text lines and pick the one with highest confidence
-    best_text = ""
-    best_conf = 0.0
+    # Collect all text lines and calculate average confidence
+    texts = []
+    confs = []
 
     for line in results[0]:
         if not line or len(line) < 2:
@@ -241,12 +236,14 @@ def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
         text_conf = line[1]
         if not text_conf or len(text_conf) < 2:
             continue
-        text = str(text_conf[0])
-        conf = float(text_conf[1])
+        texts.append(str(text_conf[0]))
+        confs.append(float(text_conf[1]))
 
-        if conf > best_conf:
-            best_text = text
-            best_conf = conf
+    if not texts:
+        return ("", 0.0)
+        
+    best_text = " ".join(texts)
+    best_conf = sum(confs) / len(confs)
 
     # Apply minimum confidence threshold
     if best_conf < config.OCR_CONFIDENCE_THRESHOLD:
@@ -265,6 +262,29 @@ def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
 
 
 # ---- EasyOCR Engine ----
+
+def load_easyocr_model():
+    """Load EasyOCR reader once at startup (singleton). Returns instance or None."""
+    global _easyocr_instance
+    if _easyocr_instance is not None:
+        return _easyocr_instance
+    try:
+        import easyocr  # type: ignore
+        logger.info("Loading EasyOCR model...")
+        t = time.time()
+        _easyocr_instance = easyocr.Reader(['en'], gpu=False)
+        # Warm up with a dummy image so first real call is fast
+        dummy = np.zeros((40, 120, 3), dtype=np.uint8)
+        _easyocr_instance.readtext(dummy)
+        logger.info(f"  ✓ EasyOCR loaded and warmed up ({time.time()-t:.1f}s)")
+    except ImportError:
+        logger.debug("EasyOCR not installed")
+        _easyocr_instance = None
+    except Exception as e:
+        logger.warning(f"EasyOCR failed to load: {e}")
+        _easyocr_instance = None
+    return _easyocr_instance
+
 
 def recognize_plate_easyocr(plate_image: np.ndarray) -> Tuple[str, float]:
     """Run EasyOCR inference on a plate crop.
@@ -290,8 +310,9 @@ def recognize_plate_easyocr(plate_image: np.ndarray) -> Tuple[str, float]:
 
     try:
         if _easyocr_instance is None:
-            logger.debug("Initializing EasyOCR reader (lazy load)...")
-            _easyocr_instance = easyocr.Reader(['en'], gpu=False)
+            load_easyocr_model()
+        if _easyocr_instance is None:
+            return ("", 0.0)
     except Exception as e:
         logger.warning(f"EasyOCR failed to initialize: {e}")
         return ("", 0.0)
@@ -305,14 +326,18 @@ def recognize_plate_easyocr(plate_image: np.ndarray) -> Tuple[str, float]:
     if not results:
         return ("", 0.0)
 
-    # Pick result with highest confidence
-    best_text = ""
-    best_conf = 0.0
+    # Combine all detected text blocks
+    texts = []
+    confs = []
     for (_bbox, text, conf) in results:
-        conf = float(conf)
-        if conf > best_conf:
-            best_text = str(text)
-            best_conf = conf
+        texts.append(str(text))
+        confs.append(float(conf))
+        
+    if not texts:
+        return ("", 0.0)
+
+    best_text = " ".join(texts)
+    best_conf = sum(confs) / len(confs)
 
     if best_conf < config.OCR_CONFIDENCE_THRESHOLD:
         logger.debug(
@@ -368,8 +393,8 @@ def recognize_plate_tesseract(plate_image: np.ndarray) -> Tuple[str, float]:
         return ("", 0.0)
 
     # Collect words with valid confidence
-    best_text = ""
-    best_conf = 0.0
+    texts_found = []
+    confs_found = []
     texts = data.get('text', [])
     confs = data.get('conf', [])
 
@@ -383,9 +408,15 @@ def recognize_plate_tesseract(plate_image: np.ndarray) -> Tuple[str, float]:
         # Tesseract confidence is 0-100; normalize to 0.0-1.0
         conf_norm = conf_val / 100.0
         word = str(raw_text).strip()
-        if word and conf_norm > best_conf:
-            best_text = word
-            best_conf = conf_norm
+        if word:
+            texts_found.append(word)
+            confs_found.append(conf_norm)
+            
+    if not texts_found:
+        return ("", 0.0)
+
+    best_text = " ".join(texts_found)
+    best_conf = sum(confs_found) / len(confs_found)
 
     if best_conf < config.OCR_CONFIDENCE_THRESHOLD:
         logger.debug(
@@ -401,7 +432,7 @@ def recognize_plate_tesseract(plate_image: np.ndarray) -> Tuple[str, float]:
 # ---- OCR Fallback Chain ----
 
 def _run_ocr_with_fallback(plate_image: np.ndarray) -> Tuple[str, float]:
-    """Try each OCR engine in sequence: PaddleOCR → CRNN → EasyOCR → Tesseract.
+    """Try each OCR engine in sequence: PaddleOCR → EasyOCR → Tesseract.
 
     Returns the result from the first engine that meets the confidence
     threshold, or the best result found if none meet the threshold.
@@ -417,7 +448,6 @@ def _run_ocr_with_fallback(plate_image: np.ndarray) -> Tuple[str, float]:
 
     engines = [
         ("PaddleOCR", recognize_plate_paddleocr),
-        ("CRNN",      lambda img: recognize_plate(img, img)),
         ("EasyOCR",   recognize_plate_easyocr),
         ("Tesseract", recognize_plate_tesseract),
     ]
@@ -501,10 +531,10 @@ def passes_geometric_filter(
 # ---- Plate Preprocessing ----
 def preprocess_plate_variants(plate_crop: np.ndarray) -> List[np.ndarray]:
     """
-    Generate multiple variants of a plate crop for ensemble OCR.
+    Generate preprocessing variants of a plate crop for ensemble OCR.
     
     Returns:
-        List of [Original, CLAHE-only, Sharpened, Thresholded]
+        List of [Original contrast-normalized, CLAHE-enhanced]
     """
     if len(plate_crop.shape) == 3:
         gray = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
@@ -524,18 +554,6 @@ def preprocess_plate_variants(plate_crop: np.ndarray) -> List[np.ndarray]:
     # Variant 2: CLAHE only (Good for varying light)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     variants.append(clahe.apply(gray))
-    
-    # Variant 3: Sharpened + CLAHE
-    denoised = cv2.bilateralFilter(gray, 9, 75, 75)
-    kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
-    sharpened = cv2.filter2D(denoised, -1, kernel)
-    variants.append(clahe.apply(sharpened))
-    
-    # Variant 4: Adaptive Threshold (Binary)
-    thresh = cv2.adaptiveThreshold(
-        variants[1], 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-    )
-    variants.append(thresh)
     
     return variants
 
@@ -953,100 +971,105 @@ def _apply_position_based_corrections(text: str) -> str:
     return ''.join(corrected)
 
 
-def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Optional[str]:
+def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Tuple[Optional[str], float]:
     """
-    Read text from a plate crop image using an Ensemble OCR strategy.
-    
-    Pipeline:
-      1. Generate 4 preprocessing variants (original, CLAHE, sharpened, thresholded)
-      2. Run OCR on each variant via the fallback chain
-      3. Select the variant with the highest confidence score
-      4. Return the best candidate text
+    Read text from a plate crop using fast parallel ensemble OCR.
+
+    Runs 2 preprocessing variants concurrently (Original + CLAHE) and
+    returns as soon as any variant hits confidence >= 0.7.
+    Falls back to best result.
     """
     if plate_image is None or plate_image.size == 0:
-        return None
+        return None, 0.0
 
-    # Generate 4 image variants: original, CLAHE, sharpened, thresholded
-    variants = preprocess_plate_variants(plate_image)
-    variant_names = ["original", "CLAHE", "sharpened", "thresholded"]
-    
-    candidates = []
-    
-    # Run OCR on each variant using the fallback chain
-    for variant_idx, variant in enumerate(variants):
-        variant_name = variant_names[variant_idx] if variant_idx < len(variant_names) else f"variant_{variant_idx}"
+    # Only use 2 variants for speed: Original + CLAHE (best accuracy/speed tradeoff)
+    variants = preprocess_plate_variants(plate_image)[:2]
+    variant_names = ["original", "CLAHE"]
+    FAST_EXIT_CONF = 0.7  # Return immediately if any variant hits this
+
+    def _ocr_variant(idx_variant):
+        idx, variant = idx_variant
+        name = variant_names[idx] if idx < len(variant_names) else f"variant_{idx}"
         try:
+            # Single OCR call per variant (was previously called twice!)
             raw_text, confidence = _run_ocr_with_fallback(variant)
             if not raw_text or confidence < config.OCR_CONFIDENCE_THRESHOLD:
-                logger.debug(
-                    f"Ensemble variant '{variant_name}': no result "
-                    f"(conf={confidence:.3f})"
-                )
-                continue
-                
+                return None
+
+            # Clean and validate
             cleaned = clean_text(raw_text)
-            
-            # Apply position-based corrections
             cleaned = _apply_position_based_corrections(cleaned)
-            
             if is_garbage_text(cleaned):
-                logger.debug(
-                    f"Ensemble variant '{variant_name}': garbage text '{cleaned}' — skipped"
-                )
-                continue
-            
-            # Validation
-            try:
-                from rules import plate_rules # type: ignore
-                validation = plate_rules.validate_plate(cleaned)
-            except ImportError:
-                validation = None
-            
-            # Score: base confidence + bonus for valid format
-            score = confidence
-            if validation and not getattr(validation, "violation", True):
-                score += 1.0 
-                
-            candidates.append({
-                'text': cleaned,
-                'score': score,
-                'confidence': confidence,
-                'variant': variant_name,
-            })
-            logger.debug(
-                f"Ensemble variant '{variant_name}': '{cleaned}' "
-                f"(conf={confidence:.3f}, score={score:.3f})"
-            )
+                return None
+
+            logger.debug(f"OCR variant result: '{raw_text}' -> cleaned: '{cleaned}' (conf: {confidence:.3f})")
+            if len(cleaned) < 6:
+                logger.debug(f"OCR variant '{name}' rejected: length {len(cleaned)} < 6")
+                return None
+
+            # Validate to get confidence modifier and normalized plate
+            from rules import plate_rules
+            validation = plate_rules.validate_plate(cleaned, None)
+            logger.debug(f"OCR variant '{name}' validation: {validation.violation or 'LEGAL'}")
+
+            # Calculate final score for ensemble selection
+            mod = validation.confidence_modifier if hasattr(validation, 'confidence_modifier') else 1.0
+            score = float(confidence) * float(mod)
+
+            return {
+                "text": raw_text,
+                "confidence": float(confidence),
+                "variant": name,
+                "score": score,
+                "validation": validation
+            }
         except Exception as e:
-            logger.error(f"Ensemble variant '{variant_name}' error: {e}")
+            logger.error(f"OCR variant {idx} error: {e}")
+            return None
+
+    candidates = []
+    start_ensemble = time.time()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {executor.submit(_ocr_variant, (i, v)): i for i, v in enumerate(variants)}
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                candidates.append(result)
+                # Fast exit if we found a good confidence result
+                if float(result.get("confidence", 0.0)) >= FAST_EXIT_CONF:
+                    logger.info(f"Ensemble FAST-EXIT on variant '{result['variant']}' (conf={result['confidence']:.3f})")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+
+    ensemble_time = time.time() - start_ensemble
+    logger.info(f"Ensemble OCR completed in {ensemble_time:.3f}s with {len(candidates)} candidates")
 
     if not candidates:
         logger.debug("Ensemble OCR: all variants returned no usable result")
-        return None
-        
-    # Pick variant with highest score (highest confidence wins)
-    candidates.sort(key=lambda x: x.get('score', 0), reverse=True)
+        return None, 0.0
+
+    candidates.sort(key=lambda x: x.get("score", 0), reverse=True)
     best = candidates[0]
-    
     logger.info(
-        f"Ensemble OCR selected variant '{best.get('variant')}': "
-        f"'{best.get('text')}' (conf={best.get('confidence', 0):.3f}, "
-        f"score={best.get('score', 0):.3f}) "
+        f"Ensemble OCR selected variant '{best['variant']}': "
+        f"'{best['text']}' (conf={best['confidence']:.3f}, score={best['score']:.3f}) "
         f"from {len(candidates)} candidate(s)"
     )
-    return cast(str, best.get('text'))
+    return cast(str, best["text"]), float(best["confidence"])
 
 
 def get_read_confidence(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> float:
     """
     Get the OCR recognition confidence for a plate image.
+    
+    NOTE: This now delegates to read_plate() to avoid running OCR twice.
+    The caller should prefer using the confidence returned by read_plate() directly.
     """
     if plate_image is None or plate_image.size == 0:
         return 0.0
 
     try:
-        ocr_image = preprocessed_image if preprocessed_image is not None else plate_image
-        _, confidence = _run_ocr_with_fallback(ocr_image)
+        _, confidence = read_plate(plate_image, preprocessed_image)
         return float(confidence) if confidence is not None else 0.0
     except Exception as e:
         logger.error(f"OCR confidence error: {e}")

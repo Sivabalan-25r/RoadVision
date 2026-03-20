@@ -47,15 +47,22 @@ def init_database():
         CREATE TABLE IF NOT EXISTS detections (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             camera_id TEXT NOT NULL,
+            track_id INTEGER,
             detected_plate TEXT NOT NULL,
             correct_plate TEXT,
             violation TEXT,
+            font_anomaly BOOLEAN DEFAULT 0,
             confidence REAL,
+            yolo_conf REAL,
+            ocr_conf REAL,
+            confidence_modifier REAL,
             frame INTEGER,
+            frames_seen INTEGER DEFAULT 1,
             bbox TEXT,
             plate_image TEXT,
             source TEXT DEFAULT 'live_monitoring',
             vehicle_registered BOOLEAN DEFAULT 0,
+            vehicle_info TEXT,
             vehicle_owner TEXT,
             vehicle_type TEXT,
             vehicle_state TEXT,
@@ -81,6 +88,9 @@ def init_database():
         ON detections(violation)
     """)
     
+    # Migrate existing detections table — add any missing columns
+    _migrate_detections_table(cursor)
+
     conn.commit()
     conn.close()
     
@@ -88,6 +98,32 @@ def init_database():
     
     # Insert default cameras if they don't exist
     insert_default_cameras()
+
+
+def _migrate_detections_table(cursor):
+    """Add any missing columns to the detections table (safe to run on existing DBs)."""
+    cursor.execute("PRAGMA table_info(detections)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+
+    migrations = [
+        ("track_id",            "INTEGER"),
+        ("font_anomaly",        "BOOLEAN DEFAULT 0"),
+        ("yolo_conf",           "REAL"),
+        ("ocr_conf",            "REAL"),
+        ("confidence_modifier", "REAL"),
+        ("frames_seen",         "INTEGER DEFAULT 1"),
+        ("vehicle_registered",  "BOOLEAN DEFAULT 0"),
+        ("vehicle_info",        "TEXT"),
+        ("vehicle_owner",       "TEXT"),
+        ("vehicle_type",        "TEXT"),
+        ("vehicle_state",       "TEXT"),
+        ("vehicle_model",       "TEXT"),
+    ]
+
+    for col, col_type in migrations:
+        if col not in existing_cols:
+            cursor.execute(f"ALTER TABLE detections ADD COLUMN {col} {col_type}")
+            logger.info(f"DB migration: added column '{col}' to detections")
 
 
 def insert_default_cameras():
@@ -187,25 +223,35 @@ def add_detection(camera_id: str, detection: Dict):
     
     # Extract vehicle info if present
     vehicle_info = detection.get("vehicle_info", {})
+    if vehicle_info is None:
+        vehicle_info = {}
     
     cursor.execute("""
         INSERT INTO detections 
-        (camera_id, detected_plate, correct_plate, violation, confidence, 
-         frame, bbox, plate_image, source, vehicle_registered, vehicle_owner, 
-         vehicle_type, vehicle_state, vehicle_model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (camera_id, track_id, detected_plate, correct_plate, violation, font_anomaly,
+         confidence, yolo_conf, ocr_conf, confidence_modifier, frame, frames_seen,
+         bbox, plate_image, source, vehicle_registered, vehicle_info,
+         vehicle_owner, vehicle_type, vehicle_state, vehicle_model)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         camera_id,
+        detection.get("track_id"),
         detection.get("detected_plate"),
         detection.get("correct_plate"),
         detection.get("violation"),
+        1 if detection.get("font_anomaly") else 0,
         detection.get("confidence"),
+        detection.get("yolo_conf"),
+        detection.get("ocr_conf"),
+        detection.get("confidence_modifier"),
         detection.get("frame"),
+        detection.get("frames_seen", 1),
         json.dumps(detection.get("bbox")) if detection.get("bbox") else None,
         detection.get("plate_image"),
         detection.get("source", "live_monitoring"),
-        vehicle_info.get("registered", False),
-        vehicle_info.get("owner_name"),
+        1 if vehicle_info.get("registered") else 0,
+        json.dumps(vehicle_info) if vehicle_info else None,
+        vehicle_info.get("owner_name") or vehicle_info.get("owner"),
         vehicle_info.get("vehicle_type"),
         vehicle_info.get("state"),
         vehicle_info.get("model"),
@@ -240,7 +286,10 @@ def get_detections(camera_id: str, limit: int = 100, violations_only: bool = Fal
         det = dict(row)
         # Parse bbox JSON
         if det.get("bbox"):
-            det["bbox"] = json.loads(det["bbox"])
+            try:
+                det["bbox"] = json.loads(det["bbox"])
+            except:
+                det["bbox"] = None
         
         # Reconstruct vehicle_info if present
         if det.get("vehicle_registered") is not None:
@@ -252,6 +301,13 @@ def get_detections(camera_id: str, limit: int = 100, violations_only: bool = Fal
                 "model": det.get("vehicle_model"),
             }
         
+        # Ensure new fields are present for older records
+        for field in ["yolo_conf", "ocr_conf", "confidence_modifier"]:
+            if field not in det:
+                det[field] = det.get("confidence", 0.0)
+        if "frames_seen" not in det:
+            det["frames_seen"] = 1
+            
         detections.append(det)
     
     conn.close()
@@ -281,15 +337,16 @@ def get_detection_stats(camera_id: str) -> Dict:
         SELECT AVG(confidence) as avg_confidence FROM detections 
         WHERE camera_id = ?
     """, (camera_id,))
-    avg_conf = cursor.fetchone()["avg_confidence"]
+    row = cursor.fetchone()
+    avg_conf = float(row["avg_confidence"]) if row and row["avg_confidence"] is not None else 0.0
     
     conn.close()
     
     return {
-        "total_detections": total,
-        "violations": violations,
-        "legal_plates": total - violations,
-        "avg_confidence": round(avg_conf * 100, 1) if avg_conf else 0
+        "total_detections": int(total),
+        "violations": int(violations),
+        "legal_plates": int(total - violations),
+        "avg_confidence": round(avg_conf * 100, 1)
     }
 
 
