@@ -50,6 +50,11 @@ class PlateStabilizer:
                 'last_seen': now,
                 'saved': False
             }
+            # Fast-path: if configured for single-frame stabilization,
+            # confirm immediately on first sighting.
+            if self.stabilization_frames <= 1:
+                result_entry['frames_seen'] = 1
+                return True
             return False
 
     def is_saved(self, normalized_plate: str) -> bool:

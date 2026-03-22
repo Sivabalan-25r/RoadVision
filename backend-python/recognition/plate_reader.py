@@ -985,7 +985,7 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
     # Only use 2 variants for speed: Original + CLAHE (best accuracy/speed tradeoff)
     variants = preprocess_plate_variants(plate_image)[:2]
     variant_names = ["original", "CLAHE"]
-    FAST_EXIT_CONF = 0.7  # Return immediately if any variant hits this
+    FAST_EXIT_CONF = 0.82  # Return immediately only on very strong OCR
 
     def _ocr_variant(idx_variant):
         idx, variant = idx_variant
@@ -1007,17 +1007,26 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
                 logger.debug(f"OCR variant '{name}' rejected: length {len(cleaned)} < 6")
                 return None
 
-            # Validate to get confidence modifier and normalized plate
+            # Validate to get confidence modifier and corrected/normalized plate
             from rules import plate_rules
             validation = plate_rules.validate_plate(cleaned, None)
             logger.debug(f"OCR variant '{name}' validation: {validation.violation or 'LEGAL'}")
+            final_text = validation.correct_plate or validation.detected_plate or cleaned
 
-            # Calculate final score for ensemble selection
+            # Calculate final score for ensemble selection.
+            # Prefer candidates that match Indian plate format to avoid
+            # confidently choosing OCR gibberish.
             mod = validation.confidence_modifier if hasattr(validation, 'confidence_modifier') else 1.0
             score = float(confidence) * float(mod)
+            is_valid_format = bool(plate_rules.PLATE_PATTERN.match(final_text))
+            if is_valid_format:
+                score *= 1.20
+            else:
+                score *= 0.55
 
             return {
-                "text": raw_text,
+                "text": final_text,
+                "raw_text": raw_text,
                 "confidence": float(confidence),
                 "variant": name,
                 "score": score,
@@ -1035,8 +1044,13 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
             result = future.result()
             if result:
                 candidates.append(result)
-                # Fast exit if we found a good confidence result
-                if float(result.get("confidence", 0.0)) >= FAST_EXIT_CONF:
+                # Fast exit only for high-confidence candidates that are
+                # not pattern mismatches; this improves correctness.
+                if (
+                    float(result.get("confidence", 0.0)) >= FAST_EXIT_CONF
+                    and result.get("validation")
+                    and getattr(result["validation"], "violation", None) != "Plate Pattern Mismatch"
+                ):
                     logger.info(f"Ensemble FAST-EXIT on variant '{result['variant']}' (conf={result['confidence']:.3f})")
                     executor.shutdown(wait=False, cancel_futures=True)
                     break

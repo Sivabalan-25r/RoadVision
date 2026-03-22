@@ -386,6 +386,13 @@
         return false;
       }
 
+      // Normalize OCR text before voting/stabilization
+      function normalizePlateText(text) {
+        return (text || '')
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '');
+      }
+
       // Colors matching the design system
       const COLORS = {
         valid: { stroke: '#22C55E', fill: 'rgba(34,197,94,.15)', text: '#22C55E' },
@@ -566,8 +573,9 @@
         detectionHistory = {};
         drawDetections(currentDetections);
         if (isWebcamActive) {
-          // Process webcam frames - 800ms gap (optimized backend processes faster)
-          detectionInterval = setInterval(processWebcamFrame, 800);
+          // Lower interval for near real-time response.
+          // processWebcamFrame lock prevents overlapping requests.
+          detectionInterval = setInterval(processWebcamFrame, 250);
         } else {
           // Show message that webcam is needed for real detection
           alert('Please enable webcam to start real-time detection. Click the camera icon first.');
@@ -612,7 +620,7 @@
         const recent = recentDetections.slice(-10).reverse();
         recentLogBody.innerHTML = recent.map(det => {
           const badgeClass = det.violation ? 'alert' : 'success';
-          const statusText = det.violation ? `ILLEGAL: ${det.violation}` : 'LEGAL';
+          const statusText = det.violation ? `VIOLATION: ${det.violation}` : 'LEGAL';
           const confidence = Math.round(det.confidence * 100);
 
           // Thumbnail logic
@@ -649,16 +657,16 @@
 
           // Capture frame from video - resize for faster processing
           const tempCanvas = document.createElement('canvas');
-          // Reduce resolution to 640x480 for faster processing
-          const targetWidth = 640;
+          // Reduce resolution further for lower latency.
+          const targetWidth = 512;
           const targetHeight = Math.round((webcamVideo.videoHeight / webcamVideo.videoWidth) * targetWidth);
           tempCanvas.width = targetWidth;
           tempCanvas.height = targetHeight;
           const tempCtx = tempCanvas.getContext('2d');
           tempCtx.drawImage(webcamVideo, 0, 0, targetWidth, targetHeight);
 
-          // Convert to blob - Higher quality 0.95
-          const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.95));
+          // Lower JPEG quality slightly to reduce upload/processing time.
+          const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.85));
           console.log('Frame captured, size:', blob.size, 'bytes, processing resolution:', targetWidth, 'x', targetHeight);
 
           // Send to backend with original dimensions for correct bbox percentage calculation
@@ -731,29 +739,73 @@
 
               // Add new OCR result to variants for consensus
               if (newDet.detected_plate && newDet.detected_plate !== 'Detecting...') {
-                hist.variants.push({ text: newDet.detected_plate, conf: newDet.confidence || 0.5 });
+                const normalizedText = normalizePlateText(newDet.detected_plate);
+                if (normalizedText.length >= 6) {
+                  hist.variants.push({ text: normalizedText, conf: newDet.confidence || 0.5 });
+                }
                 hist.lastOcrUpdate = nowMs;
-                // Keep only last 10 variants
-                if (hist.variants.length > 10) hist.variants.shift();
+                // Keep only recent variants
+                if (hist.variants.length > 12) hist.variants.shift();
 
-                // Vote for best text (highest frequency, weighted by confidence)
+                // Vote for best text (frequency + weighted confidence).
+                // Only switch stable text when consensus is strong enough.
                 const votes = {};
+                const counts = {};
                 hist.variants.forEach(v => {
                   votes[v.text] = (votes[v.text] || 0) + v.conf;
+                  counts[v.text] = (counts[v.text] || 0) + 1;
                 });
-                let topText = hist.text;
+
+                let topText = '';
                 let topScore = 0;
+                let secondScore = 0;
                 for (const t in votes) {
                   if (votes[t] > topScore) {
+                    secondScore = topScore;
                     topScore = votes[t];
                     topText = t;
+                  } else if (votes[t] > secondScore) {
+                    secondScore = votes[t];
                   }
                 }
-                hist.text = topText;
+
+                const topCount = counts[topText] || 0;
+                const hasConsensus = topText && topCount >= 2 && topScore >= 1.2 && (topScore - secondScore) >= 0.15;
+
+                if (hasConsensus) {
+                  if (!hist.text || hist.text === 'Detecting...') {
+                    hist.text = topText;
+                    hist.pendingText = null;
+                    hist.pendingCount = 0;
+                  } else if (hist.text !== topText) {
+                    if (hist.pendingText === topText) {
+                      hist.pendingCount = (hist.pendingCount || 0) + 1;
+                    } else {
+                      hist.pendingText = topText;
+                      hist.pendingCount = 1;
+                    }
+
+                    // Require repeated consensus before replacing an already stable text
+                    if (hist.pendingCount >= 2) {
+                      hist.text = topText;
+                      hist.pendingText = null;
+                      hist.pendingCount = 0;
+                    }
+                  } else {
+                    hist.pendingText = null;
+                    hist.pendingCount = 0;
+                  }
+                }
               }
 
               hist.lastSeen = nowMs;
-              hist.violation = newDet.violation;
+              // Keep violation synced to stabilized text to avoid frame-to-frame flicker.
+              const currentNorm = normalizePlateText(newDet.detected_plate || '');
+              if (hist.text && hist.text !== 'Detecting...' && currentNorm === hist.text) {
+                hist.violation = newDet.violation;
+              } else if (!hist.text || hist.text === 'Detecting...') {
+                hist.violation = newDet.violation;
+              }
               unmatchedHistory.delete(bestMatch);
               matchedIncoming.add(newIdx);
             }
@@ -766,11 +818,15 @@
             const trackId = `track_${nextTrackId++}`;
             detectionHistory[trackId] = {
               ...newDet,
-              text: newDet.detected_plate || 'Detecting...',
-              variants: newDet.detected_plate ? [{ text: newDet.detected_plate, conf: newDet.confidence || 0.5 }] : [],
+              text: 'Detecting...',
+              variants: (newDet.detected_plate && normalizePlateText(newDet.detected_plate).length >= 6)
+                ? [{ text: normalizePlateText(newDet.detected_plate), conf: newDet.confidence || 0.5 }]
+                : [],
               lastSeen: nowMs,
               framesSeen: 1,
-              lastOcrUpdate: newDet.detected_plate ? nowMs : 0
+              lastOcrUpdate: newDet.detected_plate ? nowMs : 0,
+              pendingText: null,
+              pendingCount: 0
             };
           });
 
@@ -795,9 +851,8 @@
             }
 
             // DISPLAY RULES:
-            // Only show boxes that have been seen for at least 2 frames (improved responsiveness)
-            // OR boxes that already have a successful OCR read with high frequency
-            if (d.framesSeen >= 2 || (d.text !== 'Detecting...' && d.variants.length >= 2)) {
+            // Show detections immediately to minimize visible delay.
+            if (d.framesSeen >= 1) {
               currentDetections.push({
                 ...d,
                 detected_plate: d.text
@@ -907,7 +962,7 @@
           const bh = (det.bbox[3] / 100) * h;
 
           const isViolation = !!det.violation;
-          const isDetecting = !det.detected_plate || det.detected_plate === 'Detecting...';
+          const isDetecting = !det.detected_plate || det.detected_plate === 'Detecting...' || det.status === 'DETECTING';
           const palette = isDetecting ? COLORS.detecting : (isViolation ? COLORS.violation : COLORS.valid);
 
           // Draw semi-transparent fill
@@ -923,8 +978,8 @@
           ctx.stroke();
 
           // Label background
-          const label = det.detected_plate || 'Unknown';
-          const status = isDetecting ? 'DETECTING' : (isViolation ? `ILLEGAL: ${det.violation}` : 'LEGAL');
+          const label = isDetecting ? 'Reading Plate...' : (det.detected_plate || 'Unknown');
+          const status = isDetecting ? 'DETECTING' : (isViolation ? `VIOLATION: ${det.violation}` : 'LEGAL');
 
           ctx.font = 'bold 13px Inter, sans-serif';
           const textMetrics = ctx.measureText(label);
@@ -932,8 +987,10 @@
           const statusMetrics = ctx.measureText(status);
           const labelW = Math.max(textMetrics.width, statusMetrics.width) + 20;
           const labelH = 40;
-          const labelX = x;
-          const labelY = y - labelH - 4;
+          // Keep label inside frame and move below box when near top edge.
+          const labelX = Math.max(4, Math.min(x, w - labelW - 4));
+          const preferredTopY = y - labelH - 4;
+          const labelY = preferredTopY >= 4 ? preferredTopY : Math.min(h - labelH - 4, y + bh + 4);
 
           // Draw label background with shadow
           ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
@@ -968,7 +1025,7 @@
             const icon = isViolation ? '⚠' : '✓';
             ctx.font = 'bold 14px Arial';
             ctx.fillStyle = '#ffffff';
-            ctx.fillText(icon, labelX + labelW - 20, labelY + 14);
+            ctx.fillText(icon, labelX + labelW - 20, labelY + 10);
           }
         });
       }

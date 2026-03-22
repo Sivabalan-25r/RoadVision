@@ -664,9 +664,10 @@ async def process_camera_frame(
                 else:
                     # First sighting — show bbox + "Detecting..." until confirmed
                     results.append({
-                        "detected_plate": "Detecting...",
+                        "detected_plate": "",
                         "correct_plate": None,
                         "violation": None,
+                        "status": "DETECTING",
                         "confidence": result_entry['confidence'],
                         "bbox": result_entry['bbox'],
                         "plate_image": plate_image_data_url
@@ -675,9 +676,10 @@ async def process_camera_frame(
                 # No OCR text, just show the detection
                 logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")
                 results.append({
-                    "detected_plate": "Detecting...",
+                    "detected_plate": "",
                     "correct_plate": "",
                     "violation": None,
+                    "status": "DETECTING",
                     "confidence": min(1.0, round(det['confidence'], 2)),
                     "bbox": [
                         round(x_pct, 1),
