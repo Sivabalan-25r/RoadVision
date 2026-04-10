@@ -1,5 +1,5 @@
 """
-RoadVision — BoT-SORT Multi-Object Tracker
+EvasionEye — BoT-SORT Multi-Object Tracker
 Wrapper for Ultralytics BoT-SORT tracker to assign consistent track IDs to license plate detections.
 """
 

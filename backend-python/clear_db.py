@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-db_path = os.path.join(os.path.dirname(__file__), 'roadvision.db')
+db_path = os.path.join(os.path.dirname(__file__), 'evasioneye.db')
 print(f"Connecting to database at {db_path}")
 
 try:

@@ -41,7 +41,7 @@ class Config:
             "expiry_sec": 30
         },
         "database": {
-            "path": "roadvision.db",
+            "path": "evasioneye.db",
             "registration_path": "registration_db.sqlite"
         }
     }

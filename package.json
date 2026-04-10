@@ -1,0 +1,22 @@
+{
+  "name": "evasioneye",
+  "version": "1.0.0",
+  "description": "EvasionEye AI - Traffic Analysis & Illegal Plate Detection",
+  "main": "index.html",
+  "scripts": {
+    "start": "start.bat",
+    "dev": "start.bat",
+    "backend": "cd backend-python && venv\\Scripts\\activate.bat && uvicorn main:app --reload",
+    "test": "cd backend-python && venv\\Scripts\\python -m pytest tests"
+  },
+  "keywords": [
+    "yolo26",
+    "ai",
+    "traffic",
+    "detection"
+  ],
+  "author": "RoadVision Team",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

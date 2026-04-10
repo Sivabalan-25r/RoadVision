@@ -104,6 +104,8 @@ dmypy.json
 
 # IDE
 .vscode/
+.agent/
+.cursor/
 .idea/
 *.swp
 *.swo

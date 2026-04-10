@@ -1,5 +1,5 @@
 """
-RoadVision — Configuration Management
+EvasionEye — Configuration Management
 Centralized configuration for all model paths, thresholds, and system parameters.
 """
 
@@ -11,35 +11,39 @@ import os
 
 # Model paths
 MODELS_DIR = os.path.join(os.path.dirname(__file__), 'models')
-YOLO_MODEL_PATH = os.path.join(MODELS_DIR, 'license_plate_detector.pt')
+YOLO_MODEL_PATH = os.path.join(MODELS_DIR, 'yolov26-license-plate.pt')
 
 # YOLOv26 inference parameters
-YOLO_CONFIDENCE_THRESHOLD = 0.25  # Low threshold catches more plates; false positives filtered downstream
-YOLO_IMAGE_SIZE = 320  # Inference resolution (320×320 for speed)
-YOLO_USE_HALF_PRECISION = True  # Auto-detect CUDA for FP16 (set at runtime)
+YOLO_CONFIDENCE_THRESHOLD = 0.15  # Optimized for faster capture
+YOLO_IMAGE_SIZE = 640
+YOLO_USE_HALF_PRECISION = True
 
 # Geometric filter thresholds
-MIN_ASPECT_RATIO = 1.5   # Minimum width/height ratio
-MAX_ASPECT_RATIO = 7.0   # Maximum width/height ratio
-MIN_PLATE_WIDTH = 50     # Minimum crop width in pixels
-MIN_PLATE_HEIGHT = 15    # Minimum crop height in pixels
-MIN_PLATE_AREA = 750     # Minimum plate area in pixels
+MIN_ASPECT_RATIO = 1.2   # Increased: Real plates are horizontal rectangles (Standard is ~4-5, square is ~1.5)
+MAX_ASPECT_RATIO = 8.0
+MIN_PLATE_WIDTH = 40     # Plates smaller than 40px are unreadable by OCR
+MIN_PLATE_HEIGHT = 15
+MIN_PLATE_AREA = 300     # Minimum pixel area (W*H)
 MAX_PLATE_AREA = 100000  # Maximum plate area in pixels
 MAX_PLATE_AREA_RATIO = 0.15  # Maximum plate area as fraction of frame
 
 # ============================================================================
-# Tracking Configuration (BoT-SORT)
+# Tracking Configuration (BoT-SORT & Kalman)
 # ============================================================================
 
 BOTSORT_MAX_AGE = 30  # Track expires after N frames without detection
 BOTSORT_MIN_HITS = 1  # Assign track ID immediately
 BOTSORT_IOU_THRESHOLD = 0.1  # Intersection-over-union threshold for matching
 
+KALMAN_SKIP_FRAMES = 3  # Frames to skip YOLO inference when tracking is solid
+KALMAN_MAX_COVARIANCE = 5.0 # Covariance ceiling for tracker death
+
 # ============================================================================
-# OCR Configuration (PaddleOCR)
+# OCR Configuration (PaddleOCR & Bayesian Arbitration)
 # ============================================================================
 
-OCR_CONFIDENCE_THRESHOLD = 0.25  # Minimum confidence to accept OCR result
+OCR_CONFIDENCE_THRESHOLD = 0.15  # Lowered to accept EasyOCR reads under low-light conditions
+BAYESIAN_OCR_THRESHOLD = 0.65  # Minimum posterior probability to skip EasyOCR fallback
 OCR_FALLBACK_CHAIN = ["paddleocr", "easyocr", "tesseract"]
 
 # OCR character corrections
@@ -62,6 +66,10 @@ MAX_CLEANED_LENGTH = 12
 PLATE_FORMAT_PATTERN = r"^[A-Z]{2}\d{2}[A-Z0-9]{2,8}$"
 MIN_PLATE_LENGTH = 6
 MAX_PLATE_LENGTH = 12
+
+# Violation Logic
+ENABLE_REGISTRATION_VIOLATION = False  # Flag "Unregistered" as a violation (Set False if DB is incomplete)
+ENABLE_STRICT_PATTERN_VIOLATION = True
 
 # Known false positives
 KNOWN_FALSE_POSITIVES = {

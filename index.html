@@ -5,9 +5,9 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RoadVision — Dashboard</title>
+  <title>EvasionEye — Dashboard</title>
   <meta name="description"
-    content="RoadVision AI Dashboard — upload traffic footage, detect illegal number plates, and view analysis results." />
+    content="EvasionEye AI Dashboard — upload traffic footage, detect illegal number plates, and view analysis results." />
   <style>
     html,
     body {
@@ -39,7 +39,7 @@
             <p class="stat-label">Plates Scanned</p>
             <div class="stat-row">
               <span class="stat-value" id="totalPlatesScanned">0</span>
-              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+              <span class="stat-trend text-muted-xs">
                 Total detected
               </span>
             </div>
@@ -48,7 +48,7 @@
             <p class="stat-label">Illegal Plates Found</p>
             <div class="stat-row">
               <span class="stat-value" id="illegalPlatesFound">0</span>
-              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+              <span class="stat-trend text-muted-xs">
                 Violations
               </span>
             </div>
@@ -58,7 +58,7 @@
             <p class="stat-label">Detection Accuracy</p>
             <div class="stat-row">
               <span class="stat-value" id="detectionAccuracy">--</span>
-              <span class="stat-trend" style="color:var(--text-muted); font-size:12px;">
+              <span class="stat-trend text-muted-xs">
                 Confidence avg
               </span>
             </div>
@@ -66,10 +66,10 @@
         </div>
 
         <!-- Upload Traffic Video -->
-        <div class="section-header" style="justify-content: center; gap: 12px;">
+        <div class="section-header section-header-centered">
           <h2>Upload Traffic Video</h2>
-          <span class="badge primary" style="gap:4px;">
-            <span class="material-symbols-outlined" style="font-size:14px">videocam</span>
+          <span class="badge primary badge-tight">
+            <span class="material-symbols-outlined icon-14">videocam</span>
             Max 60 sec
           </span>
         </div>
@@ -85,21 +85,19 @@
         </div>
 
         <!-- Error Message -->
-        <div class="upload-error" id="uploadError" style="display:none;">
-          <span class="material-symbols-outlined" style="font-size:18px">error</span>
+        <div class="upload-error hidden" id="uploadError">
+          <span class="material-symbols-outlined icon-18">error</span>
           <span id="errorText">Video must be 60 seconds or shorter.</span>
         </div>
 
         <!-- Video Preview (visible after upload) -->
-        <div class="video-preview-section" id="videoPreview" style="display:none;">
-          <div class="frame-viewer" style="margin-bottom:16px;" data-glare="false">
-            <video id="videoPlayer" controls
-              style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+        <div class="video-preview-section hidden" id="videoPreview">
+          <div class="frame-viewer mb-16" data-glare="false">
+            <video id="videoPlayer" controls class="video-display"></video>
             <!-- Bounding box overlay for violations -->
-            <div class="bbox suspicious" id="violationBbox"
-              style="display:none; top:35%; left:40%; width:20%; height:12%;">
+            <div class="bbox suspicious bbox-suspicious-preview" id="violationBbox">
               <div class="bbox-label">
-                <span class="material-symbols-outlined" style="font-size:10px">warning</span>
+                <span class="material-symbols-outlined icon-10">warning</span>
                 Illegal Plate
               </div>
             </div>
@@ -121,19 +119,19 @@
           <!-- File Info & Actions -->
           <div class="video-actions">
             <div class="video-file-info">
-              <span class="material-symbols-outlined" style="font-size:20px; color:var(--primary)">movie</span>
+              <span class="material-symbols-outlined icon-20 icon-primary">movie</span>
               <div>
                 <p class="video-filename" id="videoFilename">video.mp4</p>
                 <p class="video-meta" id="videoMeta">0:00 • 0 MB</p>
               </div>
             </div>
-            <div style="display:flex; gap:10px;">
+            <div class="action-row">
               <button class="btn-outline" id="removeVideoBtn">
-                <span class="material-symbols-outlined" style="font-size:18px">delete</span>
+                <span class="material-symbols-outlined icon-18">delete</span>
                 Remove
               </button>
               <button class="btn-primary" id="analyzeBtn">
-                <span class="material-symbols-outlined" style="font-size:18px">search</span>
+                <span class="material-symbols-outlined icon-18">search</span>
                 Analyze Video
               </button>
             </div>
@@ -141,21 +139,21 @@
         </div>
 
         <!-- Processing Indicator -->
-        <div class="processing-indicator" id="processingIndicator" style="display:none;">
+        <div class="processing-indicator hidden" id="processingIndicator">
           <div class="processing-spinner"></div>
           <div>
-            <p style="font-weight:600; font-size:15px;">Analyzing video frames...</p>
-            <p style="font-size:13px; color:var(--text-muted); margin-top:4px;">Running detection pipeline: Vehicle →
+            <p class="indicator-text-primary">Analyzing video frames...</p>
+            <p class="indicator-text-secondary">Running detection pipeline: Vehicle →
               Plate → CRNN → Pattern Analysis</p>
           </div>
         </div>
 
         <!-- Detection Results (visible after analysis) -->
-        <div id="detectionResults" style="display:none; margin-top:32px;">
-          <div class="section-header" style="margin-bottom:16px;">
+        <div id="detectionResults" class="hidden mt-32">
+          <div class="section-header mb-16">
             <h2>Detection Results</h2>
             <span class="badge alert" id="resultsCount">
-              <span class="material-symbols-outlined" style="font-size:14px">warning</span>
+              <span class="material-symbols-outlined icon-14">warning</span>
               0 Violations
             </span>
           </div>
@@ -188,7 +186,7 @@
     // ============ Update Stats with Real Data ============
     async function updateDashboardStats() {
       try {
-        const stats = await RoadVisionAPI.Detection.getStats();
+        const stats = await EvasionEyeAPI.Detection.getStats();
         if (stats) {
           document.getElementById('totalPlatesScanned').textContent = stats.total_detections || 0;
           document.getElementById('illegalPlatesFound').textContent = stats.violations || 0;
@@ -322,7 +320,7 @@
         const formData = new FormData();
         formData.append('video', uploadedFile);
 
-        const response = await fetch('http://localhost:8000/analyze-video', {
+        const response = await fetch(EvasionEyeConfig.getApiUrl('ANALYZE_VIDEO'), {
           method: 'POST',
           body: formData
         });
@@ -338,7 +336,7 @@
         if (!data.detections || data.detections.length === 0) {
           showNoDetections();
           // Clear old detections from localStorage
-          localStorage.removeItem('roadvision_detections');
+          localStorage.removeItem('evasioneye_detections');
           return;
         }
 

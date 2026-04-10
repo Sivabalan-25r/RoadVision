@@ -3,7 +3,7 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>RoadVision - Live Monitoring</title>
+<title>EvasionEye - Live Monitoring</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -45,6 +45,12 @@
             border: 2px solid #ef4444;
             background: rgba(239, 68, 68, 0.1);
         }
+        .icon-fill {
+            font-variation-settings: 'FILL' 1;
+        }
+        .mock-video-feed {
+            background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBHYDzSQDvZjUglpkkLHMOxPMbFsZvYr2wZ3QHTbjmbSKZIwD0_sMxCzNYAku37wXJERE8SAw7IBMqTcpP8UOOcy2P_GYFOPwxyiQX3tjLxtD8PrQvCbfbVcn4TVeF-6EG9b11y4WzY7BuOHxiBvSk4g6e-Na3mJvGZHdCwVxzl3Lyx0ldDBjRLfhKoP7nZ99N3QL4N6S-tXNdfXLBqYnqG7vMwYnBUqXDu-GUQFaZzGJY2mcie4Z3C9u1jJAySY3Aj8R1-4m2jXhI');
+        }
     </style>
 </head>
 <body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
@@ -56,7 +62,7 @@
 <span class="material-symbols-outlined">visibility</span>
 </div>
 <div>
-<h1 class="text-lg font-bold leading-none">RoadVision</h1>
+<h1 class="text-lg font-bold leading-none">EvasionEye</h1>
 <p class="text-xs text-slate-500 dark:text-slate-400">AI Traffic System</p>
 </div>
 </div>
@@ -66,7 +72,7 @@
 <span class="text-sm font-medium">Dashboard</span>
 </a>
 <a class="flex items-center gap-3 px-3 py-2 bg-primary/10 text-primary rounded-xl transition-colors" href="#">
-<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1">videocam</span>
+<span class="material-symbols-outlined text-primary icon-fill">videocam</span>
 <span class="text-sm font-medium">Live Monitoring</span>
 </a>
 <a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-card-dark rounded-xl transition-colors" href="#">
@@ -118,7 +124,7 @@
 <div class="p-8 max-w-7xl mx-auto w-full space-y-8">
 <!-- Video Feed Viewer -->
 <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-200 dark:border-border-dark group">
-<div class="absolute inset-0 bg-cover bg-center" data-alt="Busy urban highway at night with multiple lanes and heavy traffic" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBHYDzSQDvZjUglpkkLHMOxPMbFsZvYr2wZ3QHTbjmbSKZIwD0_sMxCzNYAku37wXJERE8SAw7IBMqTcpP8UOOcy2P_GYFOPwxyiQX3tjLxtD8PrQvCbfbVcn4TVeF-6EG9b11y4WzY7BuOHxiBvSk4g6e-Na3mJvGZHdCwVxzl3Lyx0ldDBjRLfhKoP7nZ99N3QL4N6S-tXNdfXLBqYnqG7vMwYnBUqXDu-GUQFaZzGJY2mcie4Z3C9u1jJAySY3Aj8R1-4m2jXhI')"></div>
+<div class="absolute inset-0 bg-cover bg-center mock-video-feed" data-alt="Busy urban highway at night with multiple lanes and heavy traffic"></div>
 <!-- Bounding Boxes Overlays (Simulated) -->
 <div class="absolute top-1/4 left-1/4 w-32 h-20 video-overlay-green rounded flex flex-col justify-end p-1">
 <span class="text-[10px] font-bold text-white bg-green-500/80 px-1 rounded-sm w-fit uppercase">Valid</span>
@@ -135,7 +141,7 @@
 <!-- Video Controls Overlay -->
 <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
 <button class="size-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:scale-110 transition-transform">
-<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1">pause</span>
+<span class="material-symbols-outlined text-4xl icon-fill">pause</span>
 </button>
 </div>
 <!-- Bottom Bar Overlay -->

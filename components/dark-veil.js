@@ -1,5 +1,5 @@
 /**
- * RoadVision — Dark Veil WebGL Animation
+ * EvasionEye — Dark Veil WebGL Animation
  * Powered by OGL (Lightweight WebGL library)
  * Adapted from React Bits (https://www.reactbits.dev/backgrounds/dark-veil)
  */

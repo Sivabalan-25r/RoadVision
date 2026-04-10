@@ -1,6 +1,6 @@
-# RoadVision — OCR Engines Setup Guide
+# EvasionEye — OCR Engines Setup Guide
 
-To ensure high-accuracy license plate recognition, RoadVision uses a multi-engine fallback pipeline:
+To ensure high-accuracy license plate recognition, EvasionEye uses a multi-engine fallback pipeline:
 **PaddleOCR → EasyOCR → Tesseract**
 
 If you feel like OCR is "missing," it is usually because the external software or model weights are not installed.

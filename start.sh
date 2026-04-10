@@ -1,8 +1,8 @@
 #!/bin/bash
-# RoadVision Startup Script (Linux/Mac)
+# EvasionEye Startup Script (Linux/Mac)
 
 echo "=========================================="
-echo "  RoadVision - Starting Application"
+echo "  EvasionEye - Starting Application"
 echo "=========================================="
 echo ""
 
@@ -27,14 +27,9 @@ fi
 echo "Activating virtual environment..."
 source venv/bin/activate
 
-echo "Checking dependencies..."
-if ! pip show fastapi &> /dev/null; then
-    echo "⚠ Dependencies not installed. Installing..."
-    pip install -r requirements.txt
-    echo "✓ Dependencies installed"
-else
-    echo "✓ Dependencies already installed"
-fi
+echo "Synchronizing dependencies..."
+pip install -r requirements.txt
+echo "✓ Dependencies synchronized"
 
 # Check for model files
 echo ""

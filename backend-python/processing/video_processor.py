@@ -1,5 +1,5 @@
 """
-RoadVision — Video Processor
+EvasionEye — Video Processor
 Extracts frames from uploaded video, runs YOLO license plate detection
 via plate_reader, and assembles detection results.
 """

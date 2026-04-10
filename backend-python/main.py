@@ -1,14 +1,24 @@
+import sys
+import asyncio
+
+# Fix for Python 3.14 asyncio CancelledError on Windows with Uvicorn
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
 """
-RoadVision — FastAPI Backend
+EvasionEye — FastAPI Backend
 Main application entry point.
 
 Provides the /analyze-video endpoint that processes uploaded traffic videos,
-detects number plates using a dedicated YOLOv8 plate detector + PaddleOCR,
+detects number plates using a dedicated YOLOv26 plate detector + PaddleOCR,
 validates plate formats against Indian RTO rules, and returns structured
 detection results.
 
 Run with: uvicorn main:app --reload
-API docs: http://localhost:8001/docs
+API docs: http://localhost:8000/docs
 """
 
 import logging
@@ -33,6 +43,7 @@ try:
     from fastapi.responses import JSONResponse # type: ignore
     from fastapi.staticfiles import StaticFiles # type: ignore
     from pydantic import BaseModel # type: ignore
+    from contextlib import asynccontextmanager
 except ImportError:
     pass
 
@@ -49,20 +60,71 @@ from rules.parser.pretty_printer import format_plate
 
 # ---- Helper Functions ----
 # ---- Global Instances ----
-plate_stabilizer = PlateStabilizer(stabilization_frames=1, expiry_sec=30)
+plate_stabilizer = PlateStabilizer(stabilization_frames=2, expiry_sec=30)
 
 # ---- Logging ----
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logger = logging.getLogger("roadvision")
+logger = logging.getLogger("evasioneye")
+
+# ---- Lifespan Manager ----
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handles startup and shutdown events gracefully.
+    Replaces deprecated @app.on_event patterns.
+    """
+    # ---- Startup Logic ----
+    # Initialize database
+    db.init_database()
+    logger.info("Database initialized")
+    
+    models_dir = os.path.join(os.path.dirname(__file__), 'models')
+    detector_path = os.path.join(models_dir, 'yolov26-license-plate.pt')
+
+    logger.info("=" * 60)
+    logger.info("EvasionEye Backend v2.0 — Startup")
+    logger.info("=" * 60)
+
+    # ---- Load YOLO plate detector (REQUIRED) ----
+    try:
+        load_plate_model()
+    except FileNotFoundError as e:
+        logger.error(f"  ✗ FATAL: {e}")
+        logger.error("=" * 60)
+        raise RuntimeError(f"Plate detector model missing at: {detector_path}")
+
+    # ---- Warm up OCR engines ----
+    try:
+        from recognition.plate_reader import load_easyocr_model, load_paddleocr_model
+        load_paddleocr_model()
+        load_easyocr_model()
+    except Exception as e:
+        logger.warning(f"OCR warmup warning: {e}")
+
+    logger.info("  ✓ System integrity check completed")
+    logger.info("=" * 60)
+    
+    try:
+        yield
+    except asyncio.CancelledError:
+        # Gracefully handle the cancellation that occurs on Ctrl+C shutdown in Windows
+        logger.info("Lifespan task cancelled - cleaning up...")
+    finally:
+        # ---- Shutdown Logic ----
+        logger.info("EvasionEye backend shutting down...")
+        # Add any explicit cleanup here if needed
+
+
 
 # ---- FastAPI App ----
 app = FastAPI(
-    title="RoadVision API",
+    title="EvasionEye API",
     description="AI-powered illegal number plate detection from traffic footage.",
     version="2.0.0",
+    lifespan=lifespan
 )
 
 # ---- CORS (allow frontend to call backend) ----
@@ -74,93 +136,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- Serve frontend static files ----
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), '..')
-
-
 # ---- Health Check ----
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": "RoadVision API", "version": "2.0.0"}
+    return {"status": "ok", "service": "EvasionEye API", "version": "2.0.0"}
 
-
-# ---- Startup: load model + check dependencies ----
-@app.on_event("startup")
-async def startup_check():
-    """Load the YOLO plate detector at startup and verify dependencies."""
-    # Initialize database
-    db.init_database()
-    logger.info("Database initialized")
-    
-    models_dir = os.path.join(os.path.dirname(__file__), 'models')
-    detector_path = os.path.join(models_dir, 'license_plate_detector.pt')
-
-    logger.info("=" * 60)
-    logger.info("RoadVision Backend v2.0 — Startup")
-    logger.info("=" * 60)
-
-    # ---- Load YOLO plate detector (REQUIRED) ----
-    try:
-        load_plate_model()
-        # Model details are logged by load_plate_model()
-    except FileNotFoundError as e:
-        logger.error(f"  ✗ FATAL: {e}")
-        logger.error("=" * 60)
-        raise RuntimeError(
-            f"License plate detector model not found at: {detector_path}\n"
-            f"Place 'license_plate_detector.pt' (YOLOv26 trained on license plates) "
-            f"in backend-python/models/ and restart the server."
-        )
-
-    # ---- Check OCR availability ----
-    ocr_found = False
-    
-
-    # Check PaddleOCR
-    try:
-        import paddleocr # type: ignore
-        logger.info("  ✓ PaddleOCR:       Available")
-        ocr_found = True
-    except ImportError:
-        logger.debug("  - PaddleOCR:       Not installed")
-
-    # Check EasyOCR — pre-load and warm up to avoid 6s delay on first detection
-    try:
-        from recognition.plate_reader import load_easyocr_model
-        inst = load_easyocr_model()
-        if inst:
-            logger.info("  ✓ EasyOCR:         Loaded and warmed up")
-            ocr_found = True
-        else:
-            logger.debug("  - EasyOCR:         Not installed")
-    except Exception as e:
-        logger.debug(f"  - EasyOCR:         {e}")
-
-    # Check Tesseract
-    try:
-        import pytesseract # type: ignore
-        # Tesseract is usually in PATH on Linux, or at a specific path on Windows
-        tess_path = pytesseract.pytesseract.tesseract_cmd
-        if os.path.exists(tess_path) or os.system("tesseract --version > nul 2>&1") == 0:
-            logger.info(f"  ✓ Tesseract:       Available")
-            ocr_found = True
-        else:
-            logger.warning("  ⚠ Tesseract:       Executable not found")
-    except ImportError:
-        logger.debug("  - Tesseract:       Not installed")
-    except Exception as e:
-        logger.debug(f"  - Tesseract:       Check failed ({e})")
-
-    if not ocr_found:
-        logger.error("  ✗ FATAL: No OCR engine available (PaddleOCR, EasyOCR, or Tesseract)!")
-        logger.error("    Please install at least one fallback: pip install easyocr")
-    else:
-        logger.info("  ✓ OCR Pipeline:    Ready (with fallback support)")
-
-    logger.info("=" * 60)
-    logger.info("Ready at: http://localhost:8000")
-    logger.info("API docs: http://localhost:8000/docs")
-    logger.info("=" * 60)
+# ---- OCR check logic moved to lifespan warmup ----
+# ---- Endpoints ----
 
 
 # ---- Analyze Video Endpoint ----
@@ -171,10 +153,10 @@ async def analyze_video(video: UploadFile = File(...)):
 
     Pipeline:
       1. Extract every 5th frame from the video
-      2. YOLOv8 plate detector → bounding boxes
-      3. Geometric filter → plate crop → preprocessing (160×40)
-      4. PaddleOCR/EasyOCR/Tesseract → plate text (confidence ≥ 0.25)
-      5. Indian RTO format validation → violation detection
+      2. YOLOv26 plate detector -> bounding boxes
+      3. Geometric filter -> plate crop -> preprocessing (160x40)
+      4. PaddleOCR/EasyOCR/Tesseract -> plate text (confidence >= 0.25)
+      5. Indian RTO format validation -> violation detection
       6. Return structured JSON results
 
     Accepts: MP4, MOV, WEBM video files.
@@ -269,6 +251,7 @@ async def analyze_video(video: UploadFile = File(...)):
                 "detected_plate": validation.detected_plate,
                 "correct_plate": validation.correct_plate,
                 "violation": validation.violation,
+                "violations": validation.violations,
                 "font_anomaly": validation.font_anomaly,
                 "confidence": combined_conf,
                 "yolo_conf": yolo_conf,
@@ -470,6 +453,7 @@ class Detection(BaseModel):
     detected_plate: str
     correct_plate: str = ""
     violation: Optional[str] = None
+    violations: List[str] = []
     confidence: float
     yolo_conf: float = 0.0
     ocr_conf: float = 0.0
@@ -623,6 +607,7 @@ async def process_camera_frame(
                     ],
                     "plate_image": plate_image_data_url,
                     "vehicle_info": validation.vehicle_info,
+                    "violations": validation.violations,
                     "track_id": det.get("track_id")
                 }
                 
@@ -640,6 +625,12 @@ async def process_camera_frame(
                 # ── Stabilization: require 2+ consistent frame readings ──
                 # Use a simple regex-based normalization for stabilization key
                 normalized = re.sub(r'[\s\-]+', '', validation.detected_plate).upper()
+                
+                # Deduplication: If this track already saved a plate, ignore other variations
+                if det.get("track_id") and plate_stabilizer.is_track_saved(det["track_id"]) and not plate_stabilizer.is_saved(normalized):
+                    logger.debug(f"  - Track {det['track_id']} already saved. Skipping variation '{normalized}'")
+                    continue
+
                 is_confirmed = plate_stabilizer.stabilize_detection(normalized, result_entry)
 
                 if is_confirmed:
@@ -655,7 +646,7 @@ async def process_camera_frame(
                     if not plate_stabilizer.is_saved(normalized):
                         try:
                             db.add_detection(camera_id or 'CAM-001', result_entry)
-                            plate_stabilizer.mark_saved(normalized)
+                            plate_stabilizer.mark_saved(normalized, bbox=result_entry.get('bbox'))
                             logger.info(f"  ✓ Stabilized plate '{normalized}' — saved to DB")
                         except Exception as db_err:
                             logger.warning(f"DB save failed: {db_err}")
@@ -663,41 +654,52 @@ async def process_camera_frame(
                     results.append(result_entry)
                 else:
                     # First sighting — show bbox + "Detecting..." until confirmed
-                    results.append({
-                        "detected_plate": "",
-                        "correct_plate": None,
-                        "violation": None,
-                        "status": "DETECTING",
-                        "confidence": result_entry['confidence'],
-                        "bbox": result_entry['bbox'],
-                        "plate_image": plate_image_data_url
-                    })
-            else:
-                # No OCR text, just show the detection
-                logger.info(f"Plate {idx}: OCR failed, showing as 'Detecting...'")
+                    # Only show if not already saved for this track
+                    if not (det.get("track_id") and plate_stabilizer.is_track_saved(det["track_id"])):
+                        results.append({
+                            "detected_plate": "",
+                            "correct_plate": None,
+                            "violation": None,
+                            "status": "DETECTING",
+                            "confidence": result_entry['confidence'],
+                            "bbox": result_entry['bbox'],
+                            "track_id": det.get("track_id")
+                        })
+            elif det['confidence'] > 0.3:
+                # YOLO detected something but OCR failed — still show the box
                 results.append({
                     "detected_plate": "",
-                    "correct_plate": "",
+                    "correct_plate": None,
                     "violation": None,
                     "status": "DETECTING",
-                    "confidence": min(1.0, round(det['confidence'], 2)),
+                    "confidence": det['confidence'],
                     "bbox": [
                         round(x_pct, 1),
                         round(y_pct, 1),
                         round(w_pct, 1),
                         round(h_pct, 1)
                     ],
-                    "plate_image": plate_image_data_url
+                    "track_id": det.get("track_id")
                 })
         
-        frame_elapsed = time.time() - frame_start_time
-        logger.info(f"Returning {len(results)} results to frontend (processed in {frame_elapsed:.2f}s)")
-        return JSONResponse(content={"detections": results})
+        proc_time = (time.time() - frame_start_time) * 1000
+        logger.info(f"Frame processed in {proc_time:.1f}ms")
+        
+        return JSONResponse(content={
+            "detections": results,
+            "latency_ms": round(proc_time, 1)
+        })
         
     except Exception as e:
-        logger.error(f"Frame processing error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error processing live frame: {e}", exc_info=True)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-# ---- Mount Frontend Application (Must be last) ----
-if os.path.exists(os.path.join(FRONTEND_DIR, 'index.html')):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+# ---- Root Redirect to Frontend ----
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/index.html")
+
+# ---- Serve frontend static files (MOUNTED LAST) ----
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), '..')
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="static")

@@ -1,5 +1,5 @@
 """
-RoadVision Database Module
+EvasionEye Database Module
 SQLite database for storing camera accounts and detections
 """
 
@@ -11,7 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DATABASE_PATH = "roadvision.db"
+DATABASE_PATH = "evasioneye.db"
 
 
 def get_connection():
@@ -51,6 +51,7 @@ def init_database():
             detected_plate TEXT NOT NULL,
             correct_plate TEXT,
             violation TEXT,
+            violations TEXT,
             font_anomaly BOOLEAN DEFAULT 0,
             confidence REAL,
             yolo_conf REAL,
@@ -118,6 +119,7 @@ def _migrate_detections_table(cursor):
         ("vehicle_type",        "TEXT"),
         ("vehicle_state",       "TEXT"),
         ("vehicle_model",       "TEXT"),
+        ("violations",          "TEXT"),
     ]
 
     for col, col_type in migrations:
@@ -228,17 +230,18 @@ def add_detection(camera_id: str, detection: Dict):
     
     cursor.execute("""
         INSERT INTO detections 
-        (camera_id, track_id, detected_plate, correct_plate, violation, font_anomaly,
+        (camera_id, track_id, detected_plate, correct_plate, violation, violations, font_anomaly,
          confidence, yolo_conf, ocr_conf, confidence_modifier, frame, frames_seen,
          bbox, plate_image, source, vehicle_registered, vehicle_info,
          vehicle_owner, vehicle_type, vehicle_state, vehicle_model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         camera_id,
         detection.get("track_id"),
         detection.get("detected_plate"),
         detection.get("correct_plate"),
         detection.get("violation"),
+        json.dumps(detection.get("violations", [])) if detection.get("violations") else None,
         1 if detection.get("font_anomaly") else 0,
         detection.get("confidence"),
         detection.get("yolo_conf"),
@@ -284,12 +287,20 @@ def get_detections(camera_id: str, limit: int = 100, violations_only: bool = Fal
     
     for row in cursor.fetchall():
         det = dict(row)
-        # Parse bbox JSON
+        # Parse JSON fields
         if det.get("bbox"):
             try:
                 det["bbox"] = json.loads(det["bbox"])
             except:
                 det["bbox"] = None
+        
+        if det.get("violations"):
+            try:
+                det["violations"] = json.loads(det["violations"])
+            except:
+                det["violations"] = []
+        else:
+            det["violations"] = [det["violation"]] if det.get("violation") else []
         
         # Reconstruct vehicle_info if present
         if det.get("vehicle_registered") is not None:

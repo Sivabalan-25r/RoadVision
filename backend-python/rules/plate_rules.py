@@ -1,5 +1,5 @@
 """
-RoadVision — Indian Number Plate Format Rules
+EvasionEye — Indian Number Plate Format Rules
 Validates detected plate text against Indian RTO formatting standards.
 Detects character manipulation, spacing issues, and pattern mismatches.
 Includes context-aware normalization that considers character position.
@@ -71,6 +71,10 @@ LETTER_CONFUSION = {
     'E': 'B',
     'F': 'P',
     'V': 'U',
+    'S': 'N',   # Common for TS/TN
+    'U': 'V',
+    'O': 'D',
+    'D': 'O',
 }
 
 # Valid Indian state codes
@@ -81,6 +85,15 @@ VALID_STATE_CODES = {
     'TN', 'TR', 'TS', 'UK', 'UP', 'WB',
 }
 
+# Maximum valid RTO (district) code per state (simplified)
+# Used to correct State code when OCR misreads letters but gets digits right
+# e.g., MH82 -> TN82 (MH only goes to 50, TN has 82)
+STATE_RTO_MAX_CODE = {
+    'MH': 50, 'TN': 99, 'KA': 71, 'KL': 99, 'AP': 39, 'TS': 38,
+    'DL': 13, 'PB': 99, 'HR': 99, 'GJ': 38, 'RJ': 58, 'UP': 96,
+    'WB': 99, 'MP': 70, 'BR': 57, 'JH': 24, 'AS': 34, 'OR': 35,
+}
+
 
 class PlateValidationResult:
     """Result of plate format validation."""
@@ -89,31 +102,42 @@ class PlateValidationResult:
         self,
         detected_plate: str,
         correct_plate: Optional[str] = None,
-        violation: Optional[str] = None,
+        violation: Optional[str] = None,          # Legacy single-violation support
+        violations: Optional[list] = None,        # New: list of all violations
         confidence_modifier: float = 1.0,
         vehicle_info: Optional[Dict] = None,
         font_anomaly: bool = False,
     ):
         self.detected_plate = detected_plate
-        # Only set correct_plate if it differs from detected (actual correction)
         if correct_plate and correct_plate != detected_plate:
             self.correct_plate = correct_plate
         else:
-            self.correct_plate = None  # No correction needed
-        self.violation = violation
+            self.correct_plate = None
         self.confidence_modifier = confidence_modifier
         self.vehicle_info = vehicle_info or {}
         self.font_anomaly = font_anomaly
 
+        # Build unified violations list (support both legacy `violation` and new `violations`)
+        if violations is not None:
+            self.violations = [v for v in violations if v]  # filter None/empty
+        elif violation is not None:
+            self.violations = [violation]
+        else:
+            self.violations = []
+
+        # Legacy compat: single .violation string (first in list or None)
+        self.violation = self.violations[0] if self.violations else None
+
     @property
     def is_violation(self) -> bool:
-        return self.violation is not None
+        return len(self.violations) > 0
 
     def to_dict(self) -> dict:
         result = {
             "detected_plate": self.detected_plate,
-            "correct_plate": self.correct_plate,  # None if no correction
-            "violation": self.violation,
+            "correct_plate": self.correct_plate,
+            "violation": self.violation,          # primary (legacy)
+            "violations": self.violations,        # full list
             "font_anomaly": self.font_anomaly,
         }
         if self.vehicle_info:
@@ -184,6 +208,31 @@ def smart_normalize(plate: str) -> tuple:
         if ch.isalpha() and ch in LETTER_TO_DIGIT:
             corrected[i] = LETTER_TO_DIGIT[ch]
             corrections.append((i, ch, corrected[i]))
+
+    # --- Cross-check State and RTO code consistency ---
+    # e.g., MH82 -> TN82 (MH max is 50, TN has 82)
+    state_code = "".join(corrected[:2])
+    rto_code_str = "".join(corrected[2:4])
+    if rto_code_str.isdigit() and len(rto_code_str) == 2:
+        rto_val = int(rto_code_str)
+        max_valid = STATE_RTO_MAX_CODE.get(state_code, 99)
+        if rto_val > max_valid:
+            # Mistake detected! Try visually similar states
+            for other_state, other_max in STATE_RTO_MAX_CODE.items():
+                if rto_val <= other_max:
+                    dist = 0
+                    for k in range(2):
+                        if state_code[k] != other_state[k]:
+                            dist += 1
+                            if state_code[k] in LETTER_CONFUSION and LETTER_CONFUSION[state_code[k]] == other_state[k]:
+                                dist -= 0.5
+                    # Tight threshold (0.6): Only allow standard confusion (dist 0.5)
+                    if dist <= 0.6:
+                        logger.info(f"RTO Consistency Fix: {state_code}{rto_code_str} corrected to {other_state}{rto_code_str}")
+                        corrected[0] = other_state[0]
+                        corrected[1] = other_state[1]
+                        corrections.append((0, state_code, other_state))
+                        break
 
     # --- Position 4+: determine where series ends and number begins ---
     if len(plate) > 4:
@@ -508,132 +557,82 @@ def detect_font_anomaly(plate_crop) -> dict:
 
 def validate_plate(raw_text: str, plate_crop=None) -> PlateValidationResult:
     """
-    Run all validation rules on a detected plate.
+    Run ALL validation rules on a detected plate and accumulate every violation found.
 
-    Only plates that have a violation get a 'correct_plate' reconstruction.
-    Legal plates are left as-is (correct_plate = None = no correction needed).
-
-    Detection order (violations checked BEFORE normalization hides them):
-      1. Store the original OCR output
-      2. Detect spacing manipulation on the raw text (before cleaning)
-      3. Apply character normalization (I→1, O→0, B→8, S→5, Z→2)
-      4. Compare original vs normalized → Character Manipulation
-      5. Validate normalized plate against Indian regex
-      6. Check vehicle registration database
-      7. Return both detected and corrected plates with vehicle info
+    Unlike the old priority-based early-return approach, this function evaluates
+    every check independently and returns ALL violations that apply.
     """
-    # Step 1: Store original
     original_plate = raw_text.strip().upper()
-
-    # Step 2: Detect spacing manipulation BEFORE cleaning
     has_spacing = bool(re.search(r'[\s\-]', original_plate))
-
-    # Step 3: Clean plate text (remove spaces/hyphens/punctuation)
     cleaned = normalize_plate(raw_text)
 
     if len(cleaned) < 6:
         return PlateValidationResult(
             detected_plate=cleaned,
-            violation="Plate Pattern Mismatch",
+            violations=["Plate Pattern Mismatch"],
             confidence_modifier=0.5,
         )
 
-    # Step 3b: Apply context-aware character normalization
     corrected_plate, corrections = smart_normalize(cleaned)
-
-    # Step 3c: Detect font anomalies on the plate crop image
     font_result = detect_font_anomaly(plate_crop) if plate_crop is not None else {"is_anomaly": False, "confidence": 0.0, "reason": ""}
     has_font_anomaly = font_result.get("is_anomaly", False)
 
-    # Step 4: Determine violations — check in priority order
-
-    # Priority 1: Tampered Plate (3+ character corrections with bad state)
     state = corrected_plate[:2] if len(corrected_plate) >= 2 else ''
     tamper_threshold = 2 if state not in VALID_STATE_CODES else 3
+
+    # --- Accumulate ALL violations ---
+    all_violations = []
+    confidence_modifier = 1.0
+
+    # 1. Tampered Plate
     if len(corrections) >= tamper_threshold:
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=corrected_plate,
-            violation="Tampered Plate",
-            confidence_modifier=0.75,
-            font_anomaly=has_font_anomaly,
-        )
+        all_violations.append("Tampered Plate")
+        confidence_modifier = min(confidence_modifier, 0.75)
 
-    # Priority 2: Character Manipulation (original differs from corrected)
-    if corrections:
-        violation_type = "Non-Standard Font / Character Manipulation" if has_font_anomaly else "Character Manipulation"
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=corrected_plate,
-            violation=violation_type,
-            confidence_modifier=0.90 if has_font_anomaly else 0.95,
-            font_anomaly=has_font_anomaly,
-        )
+    # 2. Character Manipulation (only if not already Tampered)
+    elif corrections:
+        vtype = "Non-Standard Font / Character Manipulation" if has_font_anomaly else "Character Manipulation"
+        all_violations.append(vtype)
+        confidence_modifier = min(confidence_modifier, 0.90 if has_font_anomaly else 0.95)
 
-    # Priority 3: Spacing Manipulation
-    # Only flag plates with truly unusual spacing patterns
+    # 3. Spacing Manipulation
     if has_spacing:
         spacing_result = check_spacing_manipulation(original_plate, corrected_plate)
-        if spacing_result:
-            return spacing_result
+        if spacing_result and spacing_result.violation:
+            all_violations.append(spacing_result.violation)
+            confidence_modifier = min(confidence_modifier, spacing_result.confidence_modifier)
 
-    # Priority 4: Non-Standard Font (without other violations)
-    if has_font_anomaly and not corrections:
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=None,  # No text correction needed, just font flagged
-            violation="Non-Standard Font",
-            confidence_modifier=0.85,
-            font_anomaly=True,
-        )
+    # 4. Non-Standard Font (independent of character manipulation)
+    if has_font_anomaly and "Character Manipulation" not in str(all_violations):
+        all_violations.append("Non-Standard Font")
+        confidence_modifier = min(confidence_modifier, 0.85)
 
-    # Priority 5: Pattern Mismatch (doesn't fit Indian format)
+    # 5. Plate Pattern Mismatch
     if not PLATE_PATTERN.match(corrected_plate):
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=corrected_plate,
-            violation="Plate Pattern Mismatch",
-            confidence_modifier=0.8,
-            font_anomaly=has_font_anomaly,
-        )
+        all_violations.append("Plate Pattern Mismatch")
+        confidence_modifier = min(confidence_modifier, 0.8)
 
-    # Priority 5: Check vehicle registration database
-    # Look up the corrected plate (after all format fixes)
-    # This check happens BEFORE invalid state code check because
-    # an unregistered vehicle is a more serious violation
+    # 6. Unregistered Vehicle
     vehicle_info = lookup_vehicle(corrected_plate)
-    logger.info(f"Registration lookup for '{corrected_plate}' (cleaned='{cleaned}'): registered={vehicle_info.get('registered')}")
+    from config import ENABLE_REGISTRATION_VIOLATION
     
-    if not vehicle_info.get("registered"):
-        # Unregistered vehicle - this is a violation
-        logger.info(f"Unregistered vehicle detected: '{corrected_plate}'")
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=corrected_plate if corrected_plate != cleaned else None,
-            violation="Unregistered Vehicle",
-            confidence_modifier=0.85,
-            vehicle_info=vehicle_info,
-            font_anomaly=has_font_anomaly,
-        )
+    if not vehicle_info.get("registered") and ENABLE_REGISTRATION_VIOLATION:
+        all_violations.append("Unregistered Vehicle")
+        confidence_modifier = min(confidence_modifier, 0.85)
+    elif not vehicle_info.get("registered"):
+        # Not a violation yet, but we should still log it
+        logger.debug(f"Vehicle '{corrected_plate}' not in registry (violation disabled)")
 
-    # Priority 6: Invalid State Code (only if registered check passed)
-    # This is now lower priority since we already checked registration
+    # 7. Invalid State Code (if not caught by registration lookup)
     if state not in VALID_STATE_CODES:
-        return PlateValidationResult(
-            detected_plate=cleaned,
-            correct_plate=corrected_plate if corrected_plate != cleaned else None,
-            violation="Invalid State Code",
-            confidence_modifier=0.7,
-            vehicle_info=vehicle_info,
-            font_anomaly=has_font_anomaly,
-        )
+        all_violations.append("Invalid State Code")
+        confidence_modifier = min(confidence_modifier, 0.7)
 
-    # No violations — valid and registered plate
-    # Legal plates get NO correction (correct_plate = None)
     return PlateValidationResult(
         detected_plate=cleaned,
-        correct_plate=None,  # No correction needed for legal plates
-        violation=None,
+        correct_plate=corrected_plate if corrected_plate != cleaned else None,
+        violations=all_violations if all_violations else None,
+        confidence_modifier=confidence_modifier,
         vehicle_info=vehicle_info,
         font_anomaly=has_font_anomaly,
     )

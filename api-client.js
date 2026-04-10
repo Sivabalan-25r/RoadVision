@@ -1,12 +1,12 @@
-// RoadVision API Client
+// EvasionEye API Client
 // Handles all API calls to the backend with camera-based authentication
 
 // Get API base URL from config
-const API_BASE_URL = window.RoadVisionConfig ? window.RoadVisionConfig.API_BASE_URL : 'http://localhost:8000';
+const API_BASE_URL = window.EvasionEyeConfig ? window.EvasionEyeConfig.API_BASE_URL : 'http://localhost:8000';
 
 // Get current camera ID from localStorage
 function getCurrentCameraId() {
-  const cameraData = localStorage.getItem('roadvision_camera');
+  const cameraData = localStorage.getItem('evasioneye_camera');
   if (cameraData) {
     try {
       const camera = JSON.parse(cameraData);
@@ -115,7 +115,7 @@ async function analyzeVideo(videoFile) {
 }
 
 // Export API
-window.RoadVisionAPI = {
+window.EvasionEyeAPI = {
   Camera: CameraAPI,
   Detection: DetectionAPI,
   processFrame,

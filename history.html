@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RoadVision — History</title>
-  <meta name="description" content="RoadVision detection history — browse all scanned vehicles, registrations, violations, and timestamps." />
+  <title>EvasionEye — History</title>
+  <meta name="description" content="EvasionEye detection history — browse all scanned vehicles, registrations, violations, and timestamps." />
   <style>
     html,body{background:#020617;margin:0;padding:0;}
     .plate-thumbnail {
@@ -46,6 +46,20 @@
       border-radius: 4px;
       border: 1px solid rgba(59,130,246,0.3);
     }
+    
+    /* Utility & Layout Classes */
+    .mb-24 { margin-bottom: 24px; }
+    .flex-gap-10 { display: flex; gap: 10px; align-items: center; }
+    .history-badge { background: var(--surface-secondary); color: var(--text); }
+    .btn-export { display: none; gap: 6px; padding: 8px 16px; font-size: 13px; }
+    .icon-small { font-size: 16px; }
+    .centered-state { text-align: center; padding: 60px 20px; }
+    .icon-large { font-size: 48px; color: var(--text-muted); margin-bottom: 16px; }
+    .state-text { color: var(--text-muted); font-size: 14px; }
+    .state-title { margin-bottom: 8px; color: var(--text); }
+    .hidden { display: none; }
+    .table-scroll { overflow-x: auto; }
+    .text-right { text-align: right; }
   </style>
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
@@ -65,41 +79,41 @@
 
       <!-- Main Content -->
       <div class="main-content">
-        <div class="section-header" style="margin-bottom:24px;">
+        <div class="section-header mb-24">
           <h2>Detection History</h2>
-          <div style="display:flex; gap:10px; align-items:center;">
-            <span class="badge" id="historyCount" style="background:var(--surface-secondary); color:var(--text);">
+          <div class="flex-gap-10">
+            <span class="badge history-badge" id="historyCount">
               <span id="historyNumber">0</span> Records
             </span>
-            <button class="btn-primary" id="exportPdfBtn" style="display:none; gap:6px; padding:8px 16px; font-size:13px;">
-              <span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span>
+            <button class="btn-primary btn-export" id="exportPdfBtn">
+              <span class="material-symbols-outlined icon-small">picture_as_pdf</span>
               Export PDF
             </button>
           </div>
         </div>
 
         <!-- Loading State -->
-        <div id="loadingState" style="text-align:center; padding:60px 20px;">
-          <div style="font-size:48px; color:var(--text-muted); margin-bottom:16px;">
-            <span class="material-symbols-outlined" style="font-size:48px;">hourglass_empty</span>
+        <div id="loadingState" class="centered-state">
+          <div class="icon-large">
+            <span class="material-symbols-outlined icon-large">hourglass_empty</span>
           </div>
-          <p style="color:var(--text-muted); font-size:14px;">Loading history...</p>
+          <p class="state-text">Loading history...</p>
         </div>
 
         <!-- Empty State -->
-        <div id="emptyState" style="text-align:center; padding:60px 20px; display:none;">
-          <div style="font-size:48px; color:var(--text-muted); margin-bottom:16px;">
-            <span class="material-symbols-outlined" style="font-size:48px;">history</span>
+        <div id="emptyState" class="centered-state hidden">
+          <div class="icon-large">
+            <span class="material-symbols-outlined icon-large">history</span>
           </div>
-          <h3 style="margin-bottom:8px; color:var(--text);">No History Yet</h3>
-          <p style="color:var(--text-muted); font-size:14px;">
+          <h3 class="state-title">No History Yet</h3>
+          <p class="state-text">
             Detections will appear here after analyzing a video or using live monitoring.
           </p>
         </div>
 
         <!-- History Table -->
-        <div class="card" id="historyTable" style="display:none;" data-glare="false">
-          <div style="overflow-x:auto;">
+        <div class="card hidden" id="historyTable" data-glare="false">
+          <div class="table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
@@ -108,7 +122,7 @@
                   <th>Status</th>
                   <th>Confidence</th>
                   <th>Time / Frame</th>
-                  <th style="text-align:right">Actions</th>
+                  <th class="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody id="historyTableBody">
@@ -155,7 +169,7 @@
     async function loadHistory() {
       try {
         // Get all detections from database
-        const detections = await RoadVisionAPI.Detection.getAll(false, 100);
+        const detections = await EvasionEyeAPI.Detection.getAll(false, 100);
         
         if (detections.length === 0) {
           loadingState.style.display = 'none';
@@ -169,8 +183,9 @@
         // Render table rows
         historyTableBody.innerHTML = detections.map((det, index) => {
           const confidence = Math.round(det.confidence * 100);
-          const badgeClass = det.violation ? 'alert' : 'success';
-          const statusText = det.violation ? `ILLEGAL: ${det.violation}` : 'LEGAL';
+          const vList = (det.violations && det.violations.length > 0) ? det.violations : (det.violation ? [det.violation] : []);
+          const badgeClass = vList.length > 0 ? 'alert' : 'success';
+          const statusText = vList.length > 0 ? `ILLEGAL: ${vList.join(', ')}` : 'LEGAL';
           const timeStr = det.timestamp ? new Date(det.timestamp).toLocaleTimeString('en-US', { hour12: false }) : `Frame ${det.frame}`;
           
           // Thumbnail logic
@@ -190,11 +205,18 @@
             <tr>
               <td><span class="plate-number">${det.detected_plate}</span>${fontBadge}</td>
               <td>${correctedDisplay}</td>
-              <td><span class="badge ${badgeClass}">${statusText}</span></td>
+              <td>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  ${vList.length > 0 
+                    ? vList.map(v => `<span class="badge ${badgeClass}" style="font-size: 10px; padding: 2px 6px;">${v}</span>`).join('')
+                    : `<span class="badge ${badgeClass}">LEGAL</span>`
+                  }
+                </div>
+              </td>
               <td style="color:var(--success); font-weight:600;">${confidence}%</td>
               <td style="color:var(--text-muted); font-size:12px;">${timeStr}</td>
               <td style="text-align:right">
-                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate || ''}', '${statusText}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
+                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate || ''}', '${vList.join(', ')}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
                   <span class="material-symbols-outlined">visibility</span>
                 </button>
               </td>
@@ -315,7 +337,7 @@
         doc.rect(0, 14, PW, 2, 'F');
         doc.setFontSize(9); doc.setTextColor(...C.brand);
         doc.setFont('helvetica', 'bold');
-        doc.text('RoadVision', 10, 10);
+        doc.text('EvasionEye', 10, 10);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...C.muted);
         doc.setFontSize(7);
@@ -331,7 +353,7 @@
         doc.setFillColor(...C.light);
         doc.rect(0, PH - 10, PW, 10, 'F');
         doc.setFontSize(7); doc.setTextColor(...C.muted);
-        doc.text('Generated by RoadVision ANPR Monitoring System — Law Enforcement Use Only', PW / 2, PH - 4, { align: 'center' });
+        doc.text('Generated by EvasionEye ANPR Monitoring System — Law Enforcement Use Only', PW / 2, PH - 4, { align: 'center' });
         doc.text(`Page ${pg} of ${total}`, PW - 10, PH - 4, { align: 'right' });
       }
 
@@ -417,7 +439,7 @@
       doc.rect(0, 18, PW, 52, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(22); doc.setTextColor(...C.brand);
-      doc.text('RoadVision', PW / 2, 38, { align: 'center' });
+      doc.text('EvasionEye', PW / 2, 38, { align: 'center' });
       doc.setFontSize(13); doc.setTextColor(...C.white);
       doc.text('ANPR Security Detection Report', PW / 2, 47, { align: 'center' });
       doc.setFontSize(8); doc.setTextColor(...C.muted);
@@ -446,7 +468,7 @@
           ['Registered Vehicles',    registered],
           ['Unregistered Vehicles',  detections.length - registered],
           ['Average Detection Confidence', Math.round(avgConf * 100) + '%'],
-          ['Report Generated By',    'RoadVision ANPR Monitoring System v2.0'],
+          ['Report Generated By',    'EvasionEye ANPR Monitoring System v2.0'],
           ['Detection Model',        'YOLOv8 License Plate Detector'],
           ['Recognition Method',     'PaddleOCR + Indian RTO Format Validation'],
         ],
@@ -708,7 +730,7 @@
         doc.text(`Page ${p} of ${total}`, PW - 10, PH - 4, { align: 'right' });
       }
 
-      const filename = `RoadVision_Incident_Report_${now.toISOString().slice(0,10)}.pdf`;
+      const filename = `EvasionEye_Incident_Report_${now.toISOString().slice(0,10)}.pdf`;
       doc.save(filename);
     }
   </script>

@@ -1,5 +1,5 @@
 /* ================================================
-   RoadVision — Design System & Global Styles
+   EvasionEye — Design System & Global Styles
    ================================================ */
 
 /* ---------- Fonts ---------- */
@@ -83,8 +83,8 @@ input { font-family: inherit; }
   flex-shrink: 0;
   background: rgba(11, 18, 32, 0.3);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -223,8 +223,8 @@ input { font-family: inherit; }
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-header);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   flex-shrink: 0;
   position: sticky;
   top: 0;
@@ -572,6 +572,7 @@ input { font-family: inherit; }
   top: 16px;
   right: 16px;
   background: rgba(0,0,0,.6);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   padding: 8px 16px;
   border-radius: var(--radius-md);
@@ -589,6 +590,7 @@ input { font-family: inherit; }
   top: 16px;
   right: 16px;
   background: rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   padding: 12px 16px;
   border-radius: var(--radius-md);
@@ -883,6 +885,7 @@ input { font-family: inherit; }
   align-items: center;
   gap: 16px;
   background: rgba(0,0,0,.6);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   padding: 8px 24px;
   border-radius: var(--radius-full);
@@ -1184,6 +1187,7 @@ input { font-family: inherit; }
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, .8);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   z-index: 1000;
   align-items: center;
@@ -1302,3 +1306,63 @@ input { font-family: inherit; }
 }
 
 
+
+/* ---------- Dashboard Refactoring (Refined Layouts) ---------- */
+
+.text-muted-xs {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.section-header-centered {
+  justify-content: center;
+  gap: 12px;
+}
+
+.badge-tight {
+  gap: 4px;
+}
+
+.icon-10 { font-size: 10px !important; }
+.icon-14 { font-size: 14px !important; }
+.icon-18 { font-size: 18px !important; }
+.icon-20 { font-size: 20px !important; }
+.icon-primary { color: var(--primary); }
+
+.mb-16 { margin-bottom: 16px !important; }
+.mt-32 { margin-top: 32px !important; }
+
+.video-display {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.bbox-suspicious-preview {
+  display: none;
+  top: 35%;
+  left: 40%;
+  width: 20%;
+  height: 12%;
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
+}
+
+.indicator-text-primary {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.indicator-text-secondary {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.hidden {
+  display: none !important;
+}

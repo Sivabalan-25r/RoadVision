@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RoadVision — Login</title>
-  <meta name="description" content="Sign in to RoadVision — AI-powered traffic analytics and illegal plate detection system." />
+  <title>EvasionEye — Login</title>
+  <meta name="description" content="Sign in to EvasionEye — AI-powered traffic analytics and illegal plate detection system." />
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
   <style>
@@ -30,8 +30,8 @@
       background: rgba(17, 24, 39, 0.6);
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: var(--radius-xl);
-      backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
       padding: 40px 36px;
       box-shadow: 0 25px 60px rgba(0,0,0,0.6);
     }
@@ -159,6 +159,7 @@
       font-size: 13px;
       color: var(--text-secondary);
       cursor: pointer;
+      -webkit-user-select: none;
       user-select: none;
     }
 
@@ -276,6 +277,13 @@
     }
 
     .login-error.show { display: flex; }
+
+    /* Utility classes for camera selection */
+    .icon-small { font-size: 18px; }
+    .camera-list { display: flex; flex-direction: column; gap: 10px; }
+    .camera-info-title { font-weight: 600; font-size: 14px; }
+    .camera-info-subtitle { font-size: 12px; color: var(--text-muted); }
+    .check-icon { margin-left: auto; color: var(--success); }
   </style>
 </head>
 <body>
@@ -292,7 +300,7 @@
           <span class="material-symbols-outlined">visibility</span>
         </div>
         <div class="login-brand-text">
-          <h1>RoadVision</h1>
+          <h1>EvasionEye</h1>
           <p>Traffic Analytics Platform</p>
         </div>
       </div>
@@ -305,7 +313,7 @@
 
       <!-- Error Banner -->
       <div class="login-error" id="loginError">
-        <span class="material-symbols-outlined" style="font-size:18px">error</span>
+        <span class="material-symbols-outlined icon-small">error</span>
         <span id="loginErrorText">Please select a camera to continue.</span>
       </div>
 
@@ -313,41 +321,41 @@
       <div class="login-form" id="cameraSelection">
         <div class="form-group">
           <label class="form-label">Available Cameras</label>
-          <div style="display:flex; flex-direction:column; gap:10px;">
+          <div class="camera-list">
             <button class="camera-select-btn" data-camera="1">
               <span class="material-symbols-outlined">videocam</span>
               <div>
-                <div style="font-weight:600; font-size:14px;">Camera 1</div>
-                <div style="font-size:12px; color:var(--text-muted);">Main Expressway North</div>
+                <div class="camera-info-title">Camera 1</div>
+                <div class="camera-info-subtitle">Main Expressway North</div>
               </div>
-              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+              <span class="material-symbols-outlined check-icon">check_circle</span>
             </button>
             
             <button class="camera-select-btn" data-camera="2">
               <span class="material-symbols-outlined">videocam</span>
               <div>
-                <div style="font-weight:600; font-size:14px;">Camera 2</div>
-                <div style="font-size:12px; color:var(--text-muted);">City Center Junction</div>
+                <div class="camera-info-title">Camera 2</div>
+                <div class="camera-info-subtitle">City Center Junction</div>
               </div>
-              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+              <span class="material-symbols-outlined check-icon">check_circle</span>
             </button>
             
             <button class="camera-select-btn" data-camera="3">
               <span class="material-symbols-outlined">videocam</span>
               <div>
-                <div style="font-weight:600; font-size:14px;">Camera 3</div>
-                <div style="font-size:12px; color:var(--text-muted);">Highway Toll Plaza</div>
+                <div class="camera-info-title">Camera 3</div>
+                <div class="camera-info-subtitle">Highway Toll Plaza</div>
               </div>
-              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+              <span class="material-symbols-outlined check-icon">check_circle</span>
             </button>
             
             <button class="camera-select-btn" data-camera="4">
               <span class="material-symbols-outlined">videocam</span>
               <div>
-                <div style="font-weight:600; font-size:14px;">Camera 4</div>
-                <div style="font-size:12px; color:var(--text-muted);">Airport Road Entry</div>
+                <div class="camera-info-title">Camera 4</div>
+                <div class="camera-info-subtitle">Airport Road Entry</div>
               </div>
-              <span class="material-symbols-outlined" style="margin-left:auto; color:var(--success);">check_circle</span>
+              <span class="material-symbols-outlined check-icon">check_circle</span>
             </button>
           </div>
         </div>
@@ -412,7 +420,7 @@
         const cameraLocation = btn.querySelector('div > div:last-child').textContent;
         
         // Save camera selection to localStorage
-        localStorage.setItem('roadvision_camera', JSON.stringify({
+        localStorage.setItem('evasioneye_camera', JSON.stringify({
           id: `CAM-00${cameraId}`,
           name: cameraName,
           location: cameraLocation,

@@ -1,9 +1,9 @@
 // ============================================================
-// RoadVision — Evidence Store (localStorage)
+// EvasionEye — Evidence Store (localStorage)
 // Shared across Dashboard, Detections, and History pages
 // ============================================================
 
-const EVIDENCE_KEY = 'roadVisionEvidence';
+const EVIDENCE_KEY = 'evasioneye_evidence';
 const MAX_EVIDENCE_ITEMS = 20;
 
 /**

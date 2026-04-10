@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RoadVision — Camera Profile</title>
+  <title>EvasionEye — Camera Profile</title>
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
     rel="stylesheet" />
@@ -186,7 +186,7 @@
 
     // Load saved camera data
     function loadCameraData() {
-      const cameraData = localStorage.getItem('roadvision_camera');
+      const cameraData = localStorage.getItem('evasioneye_camera');
       if (cameraData) {
         try {
           const camera = JSON.parse(cameraData);
@@ -295,11 +295,11 @@
         location: document.getElementById('addressDisplay').textContent.split(',')[0] || 'Unknown Location'
       };
 
-      localStorage.setItem('roadvision_camera', JSON.stringify(cameraData));
+      localStorage.setItem('evasioneye_camera', JSON.stringify(cameraData));
       
       // Save to database
       try {
-        await RoadVisionAPI.Camera.update(cameraData.id, {
+        await EvasionEyeAPI.Camera.update(cameraData.id, {
           name: cameraData.name,
           location: cameraData.location,
           resolution: cameraData.resolution,

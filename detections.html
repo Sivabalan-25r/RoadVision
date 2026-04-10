@@ -4,9 +4,37 @@
   <meta charset="UTF-8" />
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RoadVision — Detections</title>
-  <meta name="description" content="RoadVision illegal plate detections — view flagged number plates with manipulation analysis and violations." />
-  <style>html,body{background:#020617;margin:0;padding:0;}</style>
+  <title>EvasionEye — Detections</title>
+  <meta name="description" content="EvasionEye illegal plate detections — view flagged number plates with manipulation analysis and violations." />
+  <style>
+    html,body{background:#020617;margin:0;padding:0;}
+    
+    /* Page Specific Styles */
+    .section-header { margin-bottom: 24px; }
+    .badge-icon { font-size: 14px; }
+    
+    .state-container { 
+      text-align: center; 
+      padding: 60px 20px; 
+    }
+    .state-icon-wrapper { 
+      font-size: 48px; 
+      color: var(--text-muted); 
+      margin-bottom: 16px; 
+    }
+    .state-icon-wrapper .material-symbols-outlined { font-size: 48px; }
+    .state-text { color: var(--text-muted); font-size: 14px; }
+    .state-title { margin-bottom: 8px; color: var(--text-primary); }
+    .state-description { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+    .btn-dashboard-icon { font-size: 18px; }
+    
+    .hidden { display: none !important; }
+    .detections-grid.active { display: grid; }
+    .detection-card-img-wrapper { padding: 0; overflow: hidden; background: #000; }
+    .detection-card-img-wrapper img { width: 100%; height: 100%; object-fit: contain; }
+    .violation-stack { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+    .conf-value { color: var(--success); font-weight: 600; }
+  </style>
   <link rel="stylesheet" href="styles.css" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 </head>
@@ -23,39 +51,39 @@
       <!-- Main Content -->
       <div class="main-content">
         <!-- Page Intro -->
-        <div class="section-header" style="margin-bottom:24px;">
+        <div class="section-header">
           <h2>Illegal Plate Detections</h2>
           <span class="badge alert" id="flaggedCount">
-            <span class="material-symbols-outlined" style="font-size:14px">warning</span>
+            <span class="material-symbols-outlined badge-icon">warning</span>
             <span id="flaggedNumber">0</span> Flagged
           </span>
         </div>
 
         <!-- Loading State -->
-        <div id="loadingState" style="text-align:center; padding:60px 20px;">
-          <div style="font-size:48px; color:var(--text-muted); margin-bottom:16px;">
-            <span class="material-symbols-outlined" style="font-size:48px;">hourglass_empty</span>
+        <div id="loadingState" class="state-container">
+          <div class="state-icon-wrapper">
+            <span class="material-symbols-outlined">hourglass_empty</span>
           </div>
-          <p style="color:var(--text-muted); font-size:14px;">Loading detections...</p>
+          <p class="state-text">Loading detections...</p>
         </div>
 
         <!-- Empty State -->
-        <div id="emptyState" style="text-align:center; padding:60px 20px; display:none;">
-          <div style="font-size:48px; color:var(--text-muted); margin-bottom:16px;">
-            <span class="material-symbols-outlined" style="font-size:48px;">search_off</span>
+        <div id="emptyState" class="state-container hidden">
+          <div class="state-icon-wrapper">
+            <span class="material-symbols-outlined">search_off</span>
           </div>
-          <h3 style="margin-bottom:8px; color:var(--text);">No Detections Yet</h3>
-          <p style="color:var(--text-muted); font-size:14px; margin-bottom:24px;">
+          <h3 class="state-title">No Detections Yet</h3>
+          <p class="state-description">
             Upload a video on the Dashboard to start detecting illegal plates.
           </p>
-          <a href="index.html" class="btn-primary" style="display:none">
-            <span class="material-symbols-outlined" style="font-size:18px;">upload</span>
+          <a href="index.html" class="btn-primary hidden">
+            <span class="material-symbols-outlined btn-dashboard-icon">upload</span>
             Go to Dashboard
           </a>
         </div>
 
         <!-- Detections Grid -->
-        <div class="detections-grid" id="detectionsGrid" style="display:none;">
+        <div class="detections-grid hidden" id="detectionsGrid">
           <!-- Detection cards will be dynamically inserted here -->
         </div>
 
@@ -89,11 +117,11 @@
     async function loadDetections() {
       try {
         // Get only violations from database
-        const violations = await RoadVisionAPI.Detection.getAll(true);
+        const violations = await EvasionEyeAPI.Detection.getAll(true);
         
         if (violations.length === 0) {
-          loadingState.style.display = 'none';
-          emptyState.style.display = 'block';
+          loadingState.classList.add('hidden');
+          emptyState.classList.remove('hidden');
           flaggedNumber.textContent = '0';
           return;
         }
@@ -104,8 +132,9 @@
         // Render detection cards
         detectionsGrid.innerHTML = violations.map((det, index) => {
           const confidence = Math.round(det.confidence * 100);
-          const badgeClass = det.violation.includes('Tampered') ? 'alert' : 
-                            det.violation.includes('Spacing') ? 'warning' : 'alert';
+          const vList = (det.violations && det.violations.length > 0) ? det.violations : [det.violation || 'Illegal Plate Format'];
+          const badgeClass = vList.some(v => v.includes('Tampered') || v.includes('Unregistered')) ? 'alert' : 
+                            vList.some(v => v.includes('Spacing')) ? 'warning' : 'alert';
           
           // Use plate_image from detection if available, otherwise try evidence store
           let plateImg = det.plate_image;
@@ -116,8 +145,8 @@
 
           return `
             <div class="detection-card">
-              <div class="detection-card-img" style="padding:0; overflow:hidden; background:#000;">
-                <img src="${plateImg}" alt="Plate ${det.detected_plate}" style="width:100%; height:100%; object-fit:contain;" />
+              <div class="detection-card-img detection-card-img-wrapper">
+                <img src="${plateImg}" alt="Plate ${det.detected_plate}" />
               </div>
               <div class="detection-card-body">
                 <div class="detection-row">
@@ -129,8 +158,10 @@
                   <span class="detection-value">${det.correct_plate}</span>
                 </div>
                 <div class="detection-row">
-                  <span class="detection-label">Violation Type</span>
-                  <span class="badge ${badgeClass}">${det.violation}</span>
+                  <span class="detection-label">Violation(s) Found</span>
+                  <div class="violation-stack">
+                    ${vList.map(v => `<span class="badge ${badgeClass}">${v}</span>`).join('')}
+                  </div>
                 </div>
                 ${det.vehicle_info ? `
                 <div class="detection-row">
@@ -154,12 +185,12 @@
                 ` : ''}
                 <div class="detection-row">
                   <span class="detection-label">Confidence</span>
-                  <span class="detection-value" style="color:var(--success); font-weight:600;">${confidence}%</span>
+                  <span class="detection-value conf-value">${confidence}%</span>
                 </div>
                 <button class="btn-evidence" 
                         data-plate="${det.detected_plate}" 
-                        data-corrected="${det.correct_plate}" 
-                        data-violation="${det.violation}" 
+                        data-corrected="${det.correct_plate || ''}" 
+                        data-violation="${vList.join(', ')}" 
                         data-confidence="${confidence}">
                   <span class="material-symbols-outlined" style="font-size:16px">photo_camera</span> View Evidence
                 </button>
@@ -168,9 +199,10 @@
           `;
         }).join('');
 
-        // Show grid, hide loading
-        loadingState.style.display = 'none';
-        detectionsGrid.style.display = 'grid';
+        // Final display swap
+        loadingState.classList.add('hidden');
+        detectionsGrid.classList.remove('hidden');
+        detectionsGrid.classList.add('active');
 
         // Wire up evidence buttons
         wireUpEvidenceButtons();

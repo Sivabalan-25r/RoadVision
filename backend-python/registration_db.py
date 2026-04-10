@@ -1,5 +1,5 @@
 """
-RoadVision — Mock Vehicle Registration Database
+EvasionEye — Mock Vehicle Registration Database
 Simulates a vehicle registration lookup system for testing ANPR.
 
 This module provides a lightweight in-memory registry of Indian vehicles
@@ -13,13 +13,40 @@ from typing import Dict, Optional
 # Format: SSDDLLNNNN (State-District-Letters-Numbers)
 MOCK_REGISTRY = {
     # Tamil Nadu (TN)
+    "TN82Y8388": {
+        "owner_name": "Demo User",
+        "vehicle_type": "Commercial",
+        "state": "Tamil Nadu",
+        "rto": "Mayiladuthurai",
+        "model": "Tata Ace",
+        "color": "Yellow"
+    },
+    "TN57AD3604": {
+        "owner_name": "Sivabalan",
+        "vehicle_type": "Motorcycle",
+        "state": "Tamil Nadu",
+        "rto": "Dindigul",
+        "model": "Yamaha",
+        "color": "Yellow"
+    },
+    "TN28AR7701": {
+        "owner_name": "Arun Kumar",
+        "vehicle_type": "Car",
+        "state": "Tamil Nadu",
+        "rto": "Chennai North",
+        "model": "Hyundai Verna",
+        "color": "White"
+    },
     "TN10AB1234": {
         "owner_name": "Ravi Kumar",
         "vehicle_type": "Car",
         "state": "Tamil Nadu",
         "rto": "Chennai South",
         "model": "Maruti Swift",
-        "color": "White"
+        "color": "White",
+        "violations": ["Expired Registration", "No Insurance"],
+        "severity": "MEDIUM",
+        "last_recorded": "2026-03-15"
     },
     "TN01CD5678": {
         "owner_name": "Priya Sharma",
@@ -27,7 +54,10 @@ MOCK_REGISTRY = {
         "state": "Tamil Nadu",
         "rto": "Chennai Central",
         "model": "Honda Activa",
-        "color": "Red"
+        "color": "Red",
+        "violations": ["Stolen Vehicle"],
+        "severity": "HIGH",
+        "last_recorded": "2026-04-01"
     },
     "TN09EF9012": {
         "owner_name": "Suresh Babu",
@@ -35,7 +65,10 @@ MOCK_REGISTRY = {
         "state": "Tamil Nadu",
         "rto": "Coimbatore",
         "model": "Hyundai i20",
-        "color": "Blue"
+        "color": "Blue",
+        "violations": ["Unpaid Fines"],
+        "severity": "LOW",
+        "last_recorded": "2026-03-20"
     },
     "TN22GH3456": {
         "owner_name": "Lakshmi Devi",
@@ -77,7 +110,10 @@ MOCK_REGISTRY = {
         "state": "Karnataka",
         "rto": "Bangalore Central",
         "model": "Bajaj Pulsar",
-        "color": "Blue"
+        "color": "Blue",
+        "violations": ["No Insurance", "Stolen Vehicle", "Traffic Signal Jump"],
+        "severity": "HIGH",
+        "last_recorded": "2026-04-05"
     },
     "KA01AA4321": {
         "owner_name": "Deepa Rao",
@@ -739,20 +775,17 @@ def lookup_vehicle(plate_number: str) -> Dict:
         vehicle_info["plate_number"] = normalized_plate
         return vehicle_info
     
-    # Fuzzy match: find closest plate with same state code prefix (first 2 chars)
+    # Fuzzy match: evaluate with RTO-aware positional Levenshtein distance
     if len(normalized_plate) >= 4:
-        prefix = normalized_plate[:4]  # State + district code
         best_match = None
         best_distance = 999
         
         for reg_plate in MOCK_REGISTRY:
-            # Must share same state+district prefix
-            if reg_plate[:4] != prefix:
-                continue
-            
-            # Calculate edit distance
+            # Calculate RTO-aware edit distance
             distance = _levenshtein_distance(normalized_plate, reg_plate)
-            if distance <= 2 and distance < best_distance:
+            
+            # Max allowed distance is 4 (Handles 1 state code misread OR 1 district + 1 series error)
+            if distance <= 4 and distance < best_distance:
                 best_distance = distance
                 best_match = reg_plate
         
@@ -777,21 +810,41 @@ def lookup_vehicle(plate_number: str) -> Dict:
 
 
 def _levenshtein_distance(s1: str, s2: str) -> int:
-    """Calculate Levenshtein distance between two strings."""
-    if len(s1) < len(s2):
-        return _levenshtein_distance(s2, s1)
+    """Calculate RTO-aware Levenshtein distance with positional substitution weights."""
+    if len(s1) == 0:
+        return len(s2)
     if len(s2) == 0:
         return len(s1)
-    prev_row = list(range(len(s2) + 1))
-    for i, c1 in enumerate(s1):
-        curr_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = prev_row[j + 1] + 1
-            deletions = curr_row[j] + 1
-            substitutions = prev_row[j] + (c1 != c2)
-            curr_row.append(min(insertions, deletions, substitutions))
-        prev_row = curr_row
-    return prev_row[-1]
+        
+    m, n = len(s1), len(s2)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+        
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if s1[i-1] == s2[j-1]:
+                cost = 0
+            else:
+                # RTO Positional substitution penalty
+                idx = i - 1
+                if idx < 2:
+                    cost = 3  # State Code heavily penalized
+                elif idx < 4:
+                    cost = 2  # District Code 
+                else:
+                    cost = 1  # Series and Digits
+            
+            dp[i][j] = min(
+                dp[i-1][j] + 1,      # deletion
+                dp[i][j-1] + 1,      # insertion
+                dp[i-1][j-1] + cost  # substitution
+            )
+            
+    return dp[m][n]
 
 
 def is_registered_plate(plate_number: str) -> bool:
@@ -845,7 +898,7 @@ def get_registry_stats() -> Dict:
 # Example usage and testing
 if __name__ == "__main__":
     print("=" * 60)
-    print("RoadVision Mock Vehicle Registration Database")
+    print("EvasionEye Mock Vehicle Registration Database")
     print("=" * 60)
     
     # Test lookups

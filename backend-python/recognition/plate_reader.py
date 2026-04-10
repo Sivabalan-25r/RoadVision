@@ -1,5 +1,5 @@
 """
-RoadVision — Plate Reader (YOLOv26 Dedicated License Plate Detector)
+EvasionEye — Plate Reader (YOLOv26 Dedicated License Plate Detector)
 Loads the YOLOv26 license plate detector model once at startup,
 detects plates, applies geometric filters, preprocesses crops for OCR,
 and reads text via PaddleOCR (or CRNN when weights are available).
@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Tuple, List, Any, Dict, Union, cast
 
@@ -21,27 +22,53 @@ if _root not in sys.path:
 import cv2      # type: ignore
 import numpy as np  # type: ignore
 
+# Disable PaddleOCR slow connectivity check (avoids 10s delay + false ImportError)
+import os as _os
+_os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
+
 try:
     from ultralytics import YOLO # type: ignore
     import torch                # type: ignore
 except ImportError:
     pass
 
+try:
+    from paddleocr import PaddleOCR as _PaddleOCR  # type: ignore
+    _PADDLEOCR_AVAILABLE = True
+except ImportError:
+    _PaddleOCR = None  # type: ignore
+    _PADDLEOCR_AVAILABLE = False
+
 
 # Import centralized configuration
 import config
+from recognition.bayesian_arbitrator import BayesianOCRArbitrator
+from stabilization.kalman_tracker import TrackerManager
 
 logger = logging.getLogger(__name__)
+
+# ---- Bayesian Arbitrator ----
+_arbitrator = BayesianOCRArbitrator(threshold=getattr(config, 'BAYESIAN_OCR_THRESHOLD', 0.65))
+
+# ---- Kalman Tracker Manager ----
+_tracker_manager = TrackerManager(
+    max_unseen=getattr(config, 'KALMAN_SKIP_FRAMES', 3),
+    max_cov=getattr(config, 'KALMAN_MAX_COVARIANCE', 5.0)
+)
+
 
 # ---- YOLO Plate Detector ----
 _plate_model = None
 _use_half_precision = False  # Will be set during model loading
 
 # ---- PaddleOCR Instance ----
+_PADDLE_UNAVAILABLE = object()  # Sentinel: means we tried and it's not available
 _paddleocr_instance = None
+_paddle_lock = threading.Lock()  # Prevents 4-thread race on first load
 
 # ---- EasyOCR Instance ----
 _easyocr_instance = None
+_easyocr_lock = threading.Lock()
 
 # ---- Tesseract availability flag ----
 _tesseract_available: Optional[bool] = None
@@ -68,7 +95,7 @@ def load_plate_model():
     if not os.path.exists(config.YOLO_MODEL_PATH):
         raise FileNotFoundError(
             f"License plate detector model not found at: {config.YOLO_MODEL_PATH}\n"
-            f"Please place 'license_plate_detector.pt' in backend-python/models/.\n"
+            f"Please place 'yolov26-license-plate.pt' in backend-python/models/.\n"
             f"This model is required — the server cannot start without it."
         )
 
@@ -81,40 +108,40 @@ def load_plate_model():
     
     load_start = time.time()
     try:
+        # Initialize model
         _plate_model = YOLO(config.YOLO_MODEL_PATH)
+        
+        # YOLOv26 Optimization: Set device once
+        cuda_available = torch.cuda.is_available()
+        device = "cuda" if cuda_available else "cpu"
+
+        # Check if model is NMS-Free (YOLO26 feature)
+        has_nms = any('nms' in str(m).lower() for m in _plate_model.model.modules())
+
+        # Enable FP16 half-precision if CUDA available for YOLOv26 real-time speed
+        if device == "cuda":
+            _plate_model.model.half() # FP16 half-precision for real-time GPU performance
+            _use_half_precision = True
+            logger.info(f"  ✓ CUDA GPU detected — YOLOv26 FP16 half-precision ENABLED")
+        else:
+            _use_half_precision = False
+            logger.info(f"  ℹ Using {device.upper()} inference mode")
+
+        _plate_model.to(device)
     finally:
         torch.load = _original_torch_load
     
     load_time = time.time() - load_start
-    
-    # Auto-detect CUDA and enable FP16 half-precision if available
-    cuda_available = False
-    try:
-        if torch.cuda.is_available():
-            cuda_available = True
-            _use_half_precision = config.YOLO_USE_HALF_PRECISION
-            if _use_half_precision:
-                logger.info(f"  ✓ CUDA GPU detected — enabling FP16 half-precision for speed")
-            else:
-                logger.info(f"  ✓ CUDA GPU detected — FP16 disabled in config")
-        else:
-            _use_half_precision = False
-            logger.info(f"  ℹ CUDA not available — using CPU inference")
-    except Exception as e:
-        logger.warning(f"  ⚠ CUDA detection failed: {e}")
-        _use_half_precision = False
     
     # Log model parameters and configuration
     try:
         param_count = sum(p.numel() for p in _plate_model.model.parameters())
         param_count_m = param_count / 1_000_000
         
-        logger.info(f"  ✓ YOLOv26 plate detector loaded successfully")
-        logger.info(f"    - Model parameters: {param_count_m:.1f}M")
+        logger.info(f"  ✓ YOLO26 plate detector loaded successfully")
+        logger.info(f"    - Model parameters: {param_count_m:.2f}M")
+        logger.info(f"    - Architecture: {'End-to-End (NMS-Free)' if not has_nms else 'Traditional'}")
         logger.info(f"    - Load time: {load_time:.2f}s")
-        logger.info(f"    - Inference size: {config.YOLO_IMAGE_SIZE}×{config.YOLO_IMAGE_SIZE}")
-        logger.info(f"    - Confidence threshold: {config.YOLO_CONFIDENCE_THRESHOLD}")
-        logger.info(f"    - FP16 half-precision: {'Enabled' if _use_half_precision else 'Disabled'}")
         logger.info(f"    - Device: {'CUDA GPU' if cuda_available else 'CPU'}")
     except Exception as e:
         logger.warning(f"  ⚠ Could not retrieve model parameters: {e}")
@@ -136,6 +163,8 @@ def load_plate_model():
     except Exception as e:
         logger.warning(f"  ⚠ Test inference failed: {e}")
     
+    # Run a quick inference test to measure performance
+    
     return _plate_model
 
 
@@ -153,39 +182,60 @@ def _get_plate_model():
 def load_paddleocr_model():
     """Load the PaddleOCR PP-OCRv5 model once at startup.
 
-    If PaddleOCR is not installed or fails to load, logs a warning and
-    sets the instance to None (graceful degradation — other OCR engines
-    in the fallback chain will be used instead).
+    If PaddleOCR is not installed or fails to load, logs a warning ONCE and
+    sets the instance to sentinel _PADDLE_UNAVAILABLE (graceful degradation).
+    Thread-safe via double-checked locking.
     """
     global _paddleocr_instance
+
+    # Fast path: already loaded or already failed
     if _paddleocr_instance is not None:
-        return _paddleocr_instance
+        return None if _paddleocr_instance is _PADDLE_UNAVAILABLE else _paddleocr_instance
 
-    try:
-        from paddleocr import PaddleOCR  # type: ignore
+    with _paddle_lock:
+        # Re-check after acquiring lock (another thread may have loaded it)
+        if _paddleocr_instance is not None:
+            return None if _paddleocr_instance is _PADDLE_UNAVAILABLE else _paddleocr_instance
 
-        logger.info("Loading PaddleOCR PP-OCRv5 model...")
-        load_start = time.time()
+        if not _PADDLEOCR_AVAILABLE or _PaddleOCR is None:
+            logger.warning(
+                "PaddleOCR is not installed — OCR will fall back to EasyOCR. "
+                "Install with: pip install paddleocr"
+            )
+            _paddleocr_instance = _PADDLE_UNAVAILABLE
+        else:
+            try:
+                logger.info("Loading PaddleOCR PP-OCRv5 model...")
+                load_start = time.time()
 
-        _paddleocr_instance = PaddleOCR(
-            use_angle_cls=True,
-            lang="en",
-            show_log=False,
-        )
+                # Try newer API first (show_log removed in newer versions)
+                try:
+                    _paddleocr_instance = _PaddleOCR(
+                        use_angle_cls=True,
+                        lang="en",
+                    )
+                except TypeError:
+                    _paddleocr_instance = _PaddleOCR(
+                        use_angle_cls=True,
+                        lang="en",
+                        show_log=False,
+                    )
 
-        load_time = time.time() - load_start
-        logger.info(f"  ✓ PaddleOCR PP-OCRv5 loaded successfully (load time: {load_time:.2f}s)")
-    except ImportError:
-        logger.warning(
-            "PaddleOCR is not installed — OCR will fall back to CRNN/EasyOCR/Tesseract. "
-            "Install with: pip install paddleocr"
-        )
-        _paddleocr_instance = None
-    except Exception as e:
-        logger.warning(f"PaddleOCR failed to load: {e} — falling back to other OCR engines")
-        _paddleocr_instance = None
+                load_time = time.time() - load_start
+                logger.info(f"  ✓ PaddleOCR PP-OCRv5 loaded successfully (load time: {load_time:.2f}s)")
+            except Exception as e:
+                import sys
+                py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+                if "No module named 'paddle'" in str(e):
+                    logger.warning(
+                        f"PaddleOCR (paddlepaddle) is not installed. To fix this, run: pip install paddlepaddle paddleocr. "
+                        f"NOTE: PaddlePaddle currently supports Python 3.9-3.13. Your version ({py_version}) may be too new."
+                    )
+                else:
+                    logger.warning(f"PaddleOCR failed to load: {e} — falling back to EasyOCR")
+                _paddleocr_instance = _PADDLE_UNAVAILABLE
 
-    return _paddleocr_instance
+    return None if _paddleocr_instance is _PADDLE_UNAVAILABLE else _paddleocr_instance
 
 
 def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
@@ -201,10 +251,10 @@ def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
     """
     global _paddleocr_instance
 
-    if _paddleocr_instance is None:
-        _paddleocr_instance = load_paddleocr_model()
+    if _paddleocr_instance is None or _paddleocr_instance is _PADDLE_UNAVAILABLE:
+        _paddleocr_instance = load_paddleocr_model() or _PADDLE_UNAVAILABLE
 
-    if _paddleocr_instance is None:
+    if _paddleocr_instance is _PADDLE_UNAVAILABLE:
         logger.debug("PaddleOCR unavailable — skipping inference")
         return ("", 0.0)
 
@@ -214,7 +264,9 @@ def recognize_plate_paddleocr(plate_image: np.ndarray) -> Tuple[str, float]:
 
     inference_start = time.time()
     try:
-        results = _paddleocr_instance.ocr(plate_image, cls=True)
+        # In PaddleOCR 3.x, passing cls=True to .ocr() can cause 'unexpected keyword argument' 
+        # because the classifier is already enabled/managed by the constructor's 'use_angle_cls' flag.
+        results = _paddleocr_instance.ocr(plate_image)
     except Exception as e:
         logger.error(f"PaddleOCR inference error: {e}")
         return ("", 0.0)
@@ -432,62 +484,29 @@ def recognize_plate_tesseract(plate_image: np.ndarray) -> Tuple[str, float]:
 # ---- OCR Fallback Chain ----
 
 def _run_ocr_with_fallback(plate_image: np.ndarray) -> Tuple[str, float]:
-    """Try each OCR engine in sequence: PaddleOCR → EasyOCR → Tesseract.
-
-    Returns the result from the first engine that meets the confidence
-    threshold, or the best result found if none meet the threshold.
-    Falls back to ("", 0.0) if all engines fail or return empty.
+    """Arbitrates OCR engines using Bayesian Posterior probabilities.
+    
+    Runs PaddleOCR primarily. If its posterior confidence falls below the
+    threshold, it invokes EasyOCR and performs a joint probability update 
+    or overriding selection based on Bayesian weights.
 
     Args:
         plate_image: Plate crop as a numpy array.
 
     Returns:
-        (text, confidence) from the best available engine.
+        (text, confidence) from the Bayesian Arbitration.
     """
-    threshold = config.OCR_CONFIDENCE_THRESHOLD
-
-    engines = [
-        ("PaddleOCR", recognize_plate_paddleocr),
-        ("EasyOCR",   recognize_plate_easyocr),
-        ("Tesseract", recognize_plate_tesseract),
-    ]
-
-    best_text = ""
-    best_conf = 0.0
-    best_engine = ""
-
-    for engine_name, engine_fn in engines:
-        try:
-            text, conf = engine_fn(plate_image)
-        except Exception as e:
-            logger.warning(f"OCR engine {engine_name} raised an error: {e}")
-            continue
-
-        if text == "" and conf == 0.0:
-            # Engine unavailable or returned nothing useful
-            logger.debug(f"OCR engine {engine_name} returned no result — skipping")
-            continue
-
-        if conf >= threshold:
-            logger.info(f"OCR engine used: {engine_name} (conf={conf:.2f})")
-            return (text, conf)
-
-        # Below threshold — keep as candidate in case nothing better comes along
-        logger.info(
-            f"OCR fallback: {engine_name} insufficient (conf={conf:.2f}), "
-            f"trying next engine"
+    try:
+        text, conf = _arbitrator.arbitrate(
+            plate_image,
+            plate_image, # raw_crop isn't explicitly separated deeper down in this abstraction, so pass same image
+            recognize_plate_paddleocr,
+            recognize_plate_easyocr
         )
-        if conf > best_conf:
-            best_text = text
-            best_conf = conf
-            best_engine = engine_name
-
-    if best_text:
-        logger.info(f"OCR engine used (best available): {best_engine} (conf={best_conf:.2f})")
-        return (best_text, best_conf)
-
-    logger.debug("All OCR engines returned empty results")
-    return ("", 0.0)
+        return text, conf
+    except Exception as e:
+        logger.error(f"Bayesian Arbitration failed: {e}")
+        return ("", 0.0)
 
 
 # ---- Geometric Filtering ----
@@ -509,6 +528,10 @@ def passes_geometric_filter(
     h = y2 - y1
 
     if h <= 0 or w <= 0:
+        return False
+
+    # Check minimum dimensions
+    if w < config.MIN_PLATE_WIDTH or h < config.MIN_PLATE_HEIGHT:
         return False
 
     area = w * h
@@ -534,26 +557,64 @@ def preprocess_plate_variants(plate_crop: np.ndarray) -> List[np.ndarray]:
     Generate preprocessing variants of a plate crop for ensemble OCR.
     
     Returns:
-        List of [Original contrast-normalized, CLAHE-enhanced]
+        List of 4 variants: [Original, CLAHE, Sharpened, Thresholded]
     """
     if len(plate_crop.shape) == 3:
         gray = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
     else:
         gray = plate_crop.copy()
 
-    # Base upscale
+    # Base upscale for all variants — preserve aspect ratio for 2-line plates
     h, w = gray.shape
-    if w < 320 or h < 120:
-        gray = cv2.resize(gray, (320, 120), interpolation=cv2.INTER_CUBIC)
+    if w < 320:
+        scale = 320 / w
+        gray = cv2.resize(gray, (320, max(80, int(h * scale))), interpolation=cv2.INTER_CUBIC)
     
     variants = []
     
     # Variant 1: Original Grayscale (Contrast normalized)
     variants.append(cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX))
     
-    # Variant 2: CLAHE only (Good for varying light)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    variants.append(clahe.apply(gray))
+    # Variant 2: CLAHE enhanced (Req 7.2)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    variants.append(enhanced)
+    
+    # Variant 3: Sharpened + CLAHE (Req 7.3)
+    kernel_sharpen = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
+    variants.append(sharpened)
+    
+    # Variant 4: Adaptive threshold (binary) (Req 7.4)
+    thresh = _apply_multiple_thresholds(sharpened)
+    variants.append(thresh)
+
+    # Variant 5: Glare Reduced (Gamma Correction) - Better for mobile screens
+    invGamma = 1.0 / 0.7
+    table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    glare_reduced = cv2.LUT(enhanced, table)
+    variants.append(glare_reduced)
+
+    # Variant 6: Negative (Inverted) - Sometimes much better for dark plates
+    inverted = cv2.bitwise_not(enhanced)
+    variants.append(inverted)
+
+    # Variant 7: Deskewed (Auto-rotate)
+    try:
+        coords = np.column_stack(np.where(thresh > 0))
+        angle = cv2.minAreaRect(coords)[-1]
+        if angle < -45:
+            angle = -(90 + angle)
+        else:
+            angle = -angle
+        if abs(angle) > 0.5:
+            (h_s, w_s) = gray.shape[:2]
+            center = (w_s // 2, h_s // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(enhanced, M, (w_s, h_s), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+            variants.append(rotated)
+    except:
+        pass
     
     return variants
 
@@ -632,8 +693,12 @@ def preprocess_plate_crop(plate_crop: np.ndarray) -> np.ndarray:
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 2))
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
-    # Step 5: Resize to 320×120 with cubic interpolation (Req 7.6)
-    return cv2.resize(thresh, (320, 120), interpolation=cv2.INTER_CUBIC)
+    # Step 5: Resize preserving aspect ratio — CRITICAL for 2-line square plates.
+    # Forcing 320x120 squishes 2-line plates and destroys character proportions.
+    h_crop, w_crop = thresh.shape[:2]
+    target_w = 320
+    target_h = max(80, int(target_w * h_crop / w_crop)) if w_crop > 0 else 120
+    return cv2.resize(thresh, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
 
 
 
@@ -706,14 +771,68 @@ def detect_plates(
       - 'confidence': YOLO detection confidence
     """
     model = _get_plate_model()
-    results = model(
-        frame,
-        verbose=False,
-        conf=config.YOLO_CONFIDENCE_THRESHOLD,
-        imgsz=config.YOLO_IMAGE_SIZE,
-        half=_use_half_precision,
-        agnostic_nms=True,
-    )
+    
+    # ---- Kalman Tracking Logic ----
+    # Check if we can skip YOLO inference using existing tracks
+    active_tracks = []
+    should_skip_yolo = False
+    
+    # If we have reliable tracks that are NOT due for a YOLO re-sync
+    current_tracks = _tracker_manager.trackers
+    if current_tracks:
+        # Check if ALL current trackers are within the "skip" window
+        can_skip_all = all(t.frames_since_update < config.KALMAN_SKIP_FRAMES for t in current_tracks.values())
+        if can_skip_all and len(current_tracks) > 0:
+            should_skip_yolo = True
+            logger.debug(f"Frame {frame_number}: Skipping YOLO inference, using Kalman prediction.")
+
+    if should_skip_yolo:
+        # PURE PREDICTION MODE
+        results = [] # No YOLO results to process
+        detections = [] # Initialize detections array to prevent UnboundLocalError
+        # We will populate detections directly from Kalman predictions below
+        for t_id, tracker in current_tracks.items():
+            pred_bbox = tracker.predict() # x, y, w, h
+            x, y, w, h = map(int, pred_bbox)
+            
+            # Extract crop from prediction
+            h_img, w_img = frame.shape[:2]
+            clamped_x1 = max(0, x)
+            clamped_y1 = max(0, y)
+            clamped_x2 = min(w_img, x + w)
+            clamped_y2 = min(h_img, y + h)
+            
+            if (clamped_x2 - clamped_x1) > 10 and (clamped_y2 - clamped_y1) > 10:
+                raw_crop = frame[clamped_y1:clamped_y2, clamped_x1:clamped_x2]
+                if raw_crop.size > 0:
+                    processed = preprocess_plate_crop(raw_crop)
+                    detections.append({
+                        'bbox': [clamped_x1, clamped_y1, clamped_x2 - clamped_x1, clamped_y2 - clamped_y1],
+                        'crop': processed,
+                        'raw_crop': raw_crop,
+                        'confidence': 0.95, # High confidence for tracked prediction
+                        'track_id': t_id,
+                        'source': 'kalman_prediction'
+                    })
+        return detections
+
+    # ---- YOLO INFERENCE MODE ----
+    # YOLOv26 Specific Optimization: Use torch.inference_mode context
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    with torch.inference_mode():
+        model_results = model(
+            frame,
+            device=device,
+            verbose=False,
+            conf=config.YOLO_CONFIDENCE_THRESHOLD,
+            imgsz=config.YOLO_IMAGE_SIZE,
+            half=_use_half_precision,
+            # YOLOv26 End-to-End models handle NMS internally
+        )
+    
+    # Process YOLO results into temporal trackers
+    raw_bboxes = []
+    yolo_detections_temp = []
     detections: List[Dict[str, Any]] = []
     filtered_count: int = 0
     detection_idx: int = 0
@@ -722,7 +841,7 @@ def detect_plates(
     class_names: Dict[int, str] = getattr(model, 'names', {}) or {}
 
 
-    for result in results:
+    for result in model_results:
         boxes = result.boxes
         if boxes is None:
             continue
@@ -789,12 +908,35 @@ def detect_plates(
                 'raw_crop': refined_crop,
                 'confidence': conf,
             })
+            raw_bboxes.append([clamped_x1, clamped_y1, w_box, h_box])
             detection_idx += 1 # type: ignore
+
+    # Update Kalman trackers with new YOLO results
+    tracked_results = _tracker_manager.update(raw_bboxes)
+    
+    # Associate track IDs with our final detection list
+    for det in detections:
+        # Match back to track ID based on centroid/bbox similarity
+        best_id = -1
+        min_dist = 50
+        det_ctr = (det['bbox'][0] + det['bbox'][2]/2, det['bbox'][1] + det['bbox'][3]/2)
+        
+        for track_info in tracked_results:
+            t_id = track_info[0]
+            t_bbox = track_info[1]
+            t_ctr = (t_bbox[0] + t_bbox[2]/2, t_bbox[1] + t_bbox[3]/2)
+            dist = ((det_ctr[0]-t_ctr[0])**2 + (det_ctr[1]-t_ctr[1])**2)**0.5
+            if dist < min_dist:
+                min_dist = dist
+                best_id = t_id
+        
+        det['track_id'] = best_id if best_id != -1 else f"temp_{int(time.time()*1000)}"
+        det['source'] = 'yolo_detection'
 
     if filtered_count > 0:
         logger.debug(f"Filtered {filtered_count} plates by geometric constraints")
 
-    logger.info(f"Frame {frame_number}: Detected {len(detections)} valid plates")
+    logger.info(f"Frame {frame_number}: Detected {len(detections)} plates (YOLO Refreshed)")
     return detections
 
 
@@ -814,6 +956,9 @@ def clean_text(text: str) -> str:
 
     text = re.sub(r'[\s\-\.\,\;\:\'\"\`]+', '', text)
     text = re.sub(r'[^A-Z0-9]', '', text)
+
+    # Automatically correct 0/O, 8/B based on structural Indian plate positions
+    text = _apply_position_based_corrections(text)
 
     return text
 
@@ -908,6 +1053,7 @@ def _apply_position_based_corrections(text: str) -> str:
     
     corrected = list(text)
     
+
     # Positions 0-1: State code (MUST be letters)
     for i in range(min(2, len(text))):
         ch = text[i]
@@ -931,14 +1077,16 @@ def _apply_position_based_corrections(text: str) -> str:
         suffix = text[4:] # type: ignore
         
         # Find where series ends and number begins
-        # Strategy: Look for the first sequence of consecutive digits
-        # Everything before that is series, everything after is registration number
-        series_end = len(suffix)  # Default: all series (no digits found)
+        # Indian plates have max 4 digits for registration number.
+        # Everything before that is series.
+        suffix_len = len(suffix)
+        min_series_len = max(1, suffix_len - 4)
         
-        for j in range(len(suffix)):
+        series_end = min_series_len
+        for j in range(min_series_len, suffix_len):
             ch_suffix = str(suffix[j])
             if ch_suffix.isdigit():
-                # Found first digit - this is where registration number starts
+                # Found first digit after the guaranteed series bounds
                 series_end = j
                 break
         
@@ -953,7 +1101,8 @@ def _apply_position_based_corrections(text: str) -> str:
                 ch = text[idx]
                 ch_str = str(ch)
                 if ch_str.isdigit():
-                    digit_to_letter = {'0': 'O', '1': 'I', '8': 'B', '5': 'S', '2': 'Z', '6': 'G', '4': 'A', '7': 'T'}
+                    # If position must be letter, map '0' to 'D' in series as 'D' is standard for Indian plates, or 'O' if unavailable.
+                    digit_to_letter = {'0': 'D', '1': 'I', '8': 'B', '5': 'S', '2': 'Z', '6': 'G', '4': 'A', '7': 'T'}
                     if ch_str in digit_to_letter:
                         corrected[idx] = digit_to_letter[ch_str]
         
@@ -968,7 +1117,37 @@ def _apply_position_based_corrections(text: str) -> str:
                     if ch_str in letter_to_digit:
                         corrected[idx] = letter_to_digit[ch_str]
     
-    return ''.join(corrected)
+    result = ''.join(corrected)
+    
+    # ---- State Code Snap-Correction ----
+    # Validate state code against 36 known RTO codes.
+    # If OCR read a near-miss (e.g. TA instead of TN), snap to the closest valid code.
+    VALID_STATE_CODES = {
+        'AN', 'AP', 'AR', 'AS', 'BR', 'CG', 'CH', 'DD', 'DL', 'DN',
+        'GA', 'GJ', 'HP', 'HR', 'JH', 'JK', 'KA', 'KL', 'LA', 'LD',
+        'MH', 'ML', 'MN', 'MP', 'MZ', 'NL', 'OD', 'PB', 'PY', 'RJ',
+        'SK', 'TN', 'TR', 'TS', 'UK', 'UP', 'WB'
+    }
+    
+    state_code = result[:2]
+    if state_code not in VALID_STATE_CODES and len(result) >= 6:
+        def _state_dist(a: str, b: str) -> int:
+            return sum(1 for x, y in zip(a, b) if x != y)
+        
+        best_code = None
+        best_dist = 99
+        for code in VALID_STATE_CODES:
+            d = _state_dist(state_code, code)
+            if d < best_dist:
+                best_dist = d
+                best_code = code
+        
+        if best_code and best_dist <= 1:  # Only snap on single-char misread
+            logger.debug(f"State code snap: '{state_code}' → '{best_code}' (dist={best_dist})")
+            result = best_code + result[2:]
+    
+    return result
+
 
 
 def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -> Tuple[Optional[str], float]:
@@ -982,55 +1161,39 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
     if plate_image is None or plate_image.size == 0:
         return None, 0.0
 
-    # Only use 2 variants for speed: Original + CLAHE (best accuracy/speed tradeoff)
-    variants = preprocess_plate_variants(plate_image)[:2]
-    variant_names = ["original", "CLAHE"]
+    # Use all 4 variants for maximum accuracy (Requirements 3.5, 7.7)
+    variants = preprocess_plate_variants(plate_image)
+    variant_names = ["original", "CLAHE", "sharpened", "thresholded"]
     FAST_EXIT_CONF = 0.82  # Return immediately only on very strong OCR
 
     def _ocr_variant(idx_variant):
         idx, variant = idx_variant
         name = variant_names[idx] if idx < len(variant_names) else f"variant_{idx}"
         try:
-            # Single OCR call per variant (was previously called twice!)
             raw_text, confidence = _run_ocr_with_fallback(variant)
             if not raw_text or confidence < config.OCR_CONFIDENCE_THRESHOLD:
                 return None
 
-            # Clean and validate
+            # Basic cleaning for ensemble comparison
             cleaned = clean_text(raw_text)
-            cleaned = _apply_position_based_corrections(cleaned)
             if is_garbage_text(cleaned):
                 return None
 
             logger.debug(f"OCR variant result: '{raw_text}' -> cleaned: '{cleaned}' (conf: {confidence:.3f})")
-            if len(cleaned) < 6:
-                logger.debug(f"OCR variant '{name}' rejected: length {len(cleaned)} < 6")
-                return None
 
-            # Validate to get confidence modifier and corrected/normalized plate
-            from rules import plate_rules
-            validation = plate_rules.validate_plate(cleaned, None)
-            logger.debug(f"OCR variant '{name}' validation: {validation.violation or 'LEGAL'}")
-            final_text = validation.correct_plate or validation.detected_plate or cleaned
-
-            # Calculate final score for ensemble selection.
-            # Prefer candidates that match Indian plate format to avoid
-            # confidently choosing OCR gibberish.
-            mod = validation.confidence_modifier if hasattr(validation, 'confidence_modifier') else 1.0
-            score = float(confidence) * float(mod)
-            is_valid_format = bool(plate_rules.PLATE_PATTERN.match(final_text))
-            if is_valid_format:
-                score *= 1.20
-            else:
-                score *= 0.55
-
+            # Score variants based on confidence and "platiness" (matches Indian pattern)
+            score = float(confidence)
+            # Indian RTO pattern: SS NN SS NNNN (with some flexibility)
+            if re.match(r'^[A-Z]{2}\d{2}[A-Z0-9]{2,8}$', cleaned):
+                score *= 1.35 # 35% boost for matching the expected structure
+            
             return {
-                "text": final_text,
+                "text": cleaned,
                 "raw_text": raw_text,
                 "confidence": float(confidence),
                 "variant": name,
                 "score": score,
-                "validation": validation
+                "index": idx
             }
         except Exception as e:
             logger.error(f"OCR variant {idx} error: {e}")
@@ -1038,7 +1201,7 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
 
     candidates = []
     start_ensemble = time.time()
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(_ocr_variant, (i, v)): i for i, v in enumerate(variants)}
         for future in as_completed(futures):
             result = future.result()
@@ -1048,8 +1211,7 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
                 # not pattern mismatches; this improves correctness.
                 if (
                     float(result.get("confidence", 0.0)) >= FAST_EXIT_CONF
-                    and result.get("validation")
-                    and getattr(result["validation"], "violation", None) != "Plate Pattern Mismatch"
+                    and re.match(r'^[A-Z]{2}\d{2}[A-Z0-9]{2,8}$', result.get("text", ""))
                 ):
                     logger.info(f"Ensemble FAST-EXIT on variant '{result['variant']}' (conf={result['confidence']:.3f})")
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -1062,7 +1224,8 @@ def read_plate(plate_image: np.ndarray, preprocessed_image: np.ndarray = None) -
         logger.debug("Ensemble OCR: all variants returned no usable result")
         return None, 0.0
 
-    candidates.sort(key=lambda x: x.get("score", 0), reverse=True)
+    # Sort by score (desc), then by confidence (desc), then by index (asc) for determinism
+    candidates.sort(key=lambda x: (-x.get("score", 0), -x.get("confidence", 0), x.get("index", 0)))
     best = candidates[0]
     logger.info(
         f"Ensemble OCR selected variant '{best['variant']}': "

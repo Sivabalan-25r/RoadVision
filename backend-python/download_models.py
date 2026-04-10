@@ -10,8 +10,7 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), 'models')
 
 # Model URLs from known public sources
 MODEL_URLS = {
-    'license_plate_detector.pt': 'https://huggingface.co/keremberke/yolov8-license-plate/resolve/main/best.pt',
-    'license_plate_detector.pt': 'https://huggingface.co/keremberke/yolov8-license-plate/resolve/main/best.pt',
+    'yolov26-license-plate.pt': 'https://huggingface.co/keremberke/yolov26-license-plate/resolve/main/best.pt'
 }
 
 def download_file(url, target_path):

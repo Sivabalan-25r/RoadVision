@@ -1,5 +1,5 @@
 /**
- * RoadVision — Component Loader
+ * EvasionEye — Component Loader
  * Fetches sidebar.html and header.html, injects them into the page,
  * and highlights the active sidebar link based on the current URL.
  */
@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       // Load camera info from localStorage
-      const cameraData = localStorage.getItem('roadvision_camera');
+      const cameraData = localStorage.getItem('evasioneye_camera');
       const cameraNameEl = headerSlot.querySelector('#cameraName');
       const cameraLocEl = headerSlot.querySelector('#cameraLocation');
 

@@ -1,10 +1,10 @@
-# RoadVision 🚗
+# EvasionEye 🚗
 
 AI-powered license plate detection and validation system for traffic enforcement.
 
 ## Overview
 
-RoadVision analyzes traffic camera footage to detect and validate vehicle license plates, identifying potential violations such as:
+EvasionEye analyzes traffic camera footage to detect and validate vehicle license plates, identifying potential violations such as:
 
 - Character manipulation (O→0, I→1, B→8, S→5)
 - Spacing manipulation
@@ -23,29 +23,34 @@ RoadVision analyzes traffic camera footage to detect and validate vehicle licens
 ## Tech Stack
 
 **Frontend:**
+
 - HTML5, CSS3, JavaScript
 - Material Symbols icons
 - LocalStorage for evidence management
 
 **Backend:**
+
 - Python 3.8+
 - FastAPI (REST API)
 - YOLOv26 (plate detection)
 - PaddleOCR/EasyOCR/Tesseract ensemble (text recognition)
 - OpenCV (video processing)
 
+> [!NOTE]
+> **Python Compatibility:** PaddleOCR (high accuracy) requires Python 3.9–3.13. If you are using Python 3.14+, the system will automatically fall back to EasyOCR. To enable PaddleOCR, use a virtual environment with Python 3.13.
+
 ## Quick Start
 
 ```bash
 # 1. Install dependencies
-cd RoadVision/backend-python
+cd EvasionEye/backend-python
 pip install -r requirements.txt
 
 # 2. Start backend
 uvicorn main:app --reload --port 8000
 
 # 3. Start frontend (new terminal)
-cd RoadVision
+cd EvasionEye
 python -m http.server 3000
 
 # 4. Open browser
@@ -57,7 +62,7 @@ See [SETUP_GUIDE.md](SETUP_GUIDE.md) for detailed instructions.
 ## API Endpoints
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
+| :--- | :--- | :--- |
 | `/health` | GET | Health check |
 | `/analyze-video` | POST | Upload video for analysis |
 | `/api/process-frame` | POST | Process single camera frame |
@@ -66,7 +71,7 @@ See [SETUP_GUIDE.md](SETUP_GUIDE.md) for detailed instructions.
 
 ## Detection Pipeline
 
-```
+```text
 Video Upload
     ↓
 Frame Extraction (every 5th frame)
@@ -91,7 +96,7 @@ JSON Response
 Edit `config.js` to customize:
 
 ```javascript
-const RoadVisionConfig = {
+const EvasionEyeConfig = {
   API_BASE_URL: 'http://localhost:8000',  // Backend URL
   MAX_VIDEO_DURATION: 60,                  // Max video length (seconds)
   FRAME_INTERVAL: 5,                       // Process every Nth frame
@@ -101,8 +106,8 @@ const RoadVisionConfig = {
 
 ## Project Structure
 
-```
-RoadVision/
+```text
+EvasionEye/
 ├── index.html                 # Main dashboard
 ├── monitoring.html            # Live monitoring
 ├── history.html              # Detection history
@@ -133,9 +138,10 @@ RoadVision/
 
 ## Validation Rules
 
-RoadVision validates plates against Indian RTO format:
+EvasionEye validates plates against Indian RTO format:
 
 **Format:** `AA NN AA NNNN`
+
 - AA: State code (2 letters)
 - NN: District code (2 digits)
 - AA: Series letters (1-3 letters)
@@ -161,8 +167,8 @@ This project is for educational and research purposes.
 
 ## Credits
 
-- YOLOv8: Ultralytics
-- License Plate Detector: keremberke/yolov8-license-plate
+- YOLOv26: Ultralytics
+- License Plate Detector: keremberke/yolov26-license-plate
 - OCR Engines: EasyOCR, PaddleOCR, Tesseract
 
 ---
