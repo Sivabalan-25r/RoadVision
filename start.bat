@@ -21,9 +21,9 @@ cd backend-python
 
 echo Activating virtual environment...
 
-if not exist venv\Scripts\activate.bat goto create_venv
+if not exist ..\venv310\Scripts\activate.bat goto create_venv
 
-call venv\Scripts\activate.bat
+call ..\venv310\Scripts\activate.bat
 python --version >nul 2>&1
 if errorlevel 1 goto repair_venv
 goto sync_deps
@@ -31,13 +31,13 @@ goto sync_deps
 :repair_venv
 echo Virtual environment appears broken. Re-creating...
 cd ..
-rmdir /s /q backend-python\venv
+rmdir /s /q venv310
 cd backend-python
 
 :create_venv
-echo Creating virtual environment...
-python -m venv venv
-call venv\Scripts\activate.bat
+echo Creating virtual environment (3.10)...
+py -3.10 -m venv ..\venv310
+call ..\venv310\Scripts\activate.bat
 
 :sync_deps
 echo Synchronizing dependencies...

@@ -5,21 +5,28 @@ Runs PaddleOCR primarily, falling back to EasyOCR gracefully under uncertainty.
 """
 
 import logging
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
 class BayesianOCRArbitrator:
-    def __init__(self, threshold=0.65, paddle_prior=0.85, easy_prior=0.75):
+    def __init__(self, threshold=0.50, paddle_prior=0.90, easy_prior=0.85):
         self.threshold = threshold
         self.paddle_prior = paddle_prior
         self.easy_prior = easy_prior
         
-    def arbitrate(self, frame_crop, raw_crop, paddle_fn, easy_fn):
+    def arbitrate(self, frame_crop, raw_crop, paddle_fn, easy_fn, paddle_enabled: bool = True) -> Tuple[str, float]:
         """
-        Runs PaddleOCR first. If the resulting posterior probability is below
+        Runs PaddleOCR first (if enabled). If the resulting posterior probability is below
         the configured threshold, it invokes EasyOCR and performs a Bayesian
         update to yield the statistically most probable plate text.
         """
+        if not paddle_enabled:
+            # Skip primary engine if disabled at source
+            e_text, e_conf = easy_fn(raw_crop)
+            e_posterior = e_conf * self.easy_prior
+            return e_text, e_posterior
+
         # 1. Run primary engine (PaddleOCR)
         p_text, p_conf = paddle_fn(frame_crop)
         

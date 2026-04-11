@@ -66,36 +66,166 @@
       border-radius: 4px;
       border: 1px solid rgba(59, 130, 246, 0.3);
     }
-    
+
     /* Utility & Layout Classes */
-    .sec-header { margin-bottom: 20px; }
-    .monitoring-viewer { margin-bottom: 32px; position: relative; }
-    .fill-cover { width: 100%; height: 100%; object-fit: cover; }
-    .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-    .icon-xl { font-size: 36px; }
-    .stat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .stat-label-row { margin-bottom: 0px; }
-    .stat-icon { padding: 8px; border-radius: var(--radius-md); }
-    .stat-icon-primary { color: var(--primary); background: var(--primary-glow); }
-    .stat-icon-success { color: var(--success); background: var(--success-glow); }
-    .stat-icon-alert { color: var(--alert); background: var(--alert-glow); }
-    .stat-desc { font-size: 12px; color: var(--text-muted); }
-    .stat-trend-label { color: var(--text-muted); font-size: 12px; }
-    .mt-8 { margin-top: 8px; }
-    .mt-32 { margin-top: 32px; }
-    .mt-12 { margin-top: 12px; }
-    .link-action { color: var(--primary); font-size: 13px; font-weight: 600; }
-    .state-centered { text-align: center; padding: 40px 20px; }
-    .icon-state { font-size: 48px; color: var(--text-muted); display: block; }
-    .text-sm-muted { color: var(--text-muted); font-size: 14px; }
-    .table-scroll { overflow-x: auto; }
-    .hidden { display: none; }
+    .sec-header {
+      margin-bottom: 20px;
+    }
+
+    .monitoring-viewer {
+      margin-bottom: 24px;
+      position: relative;
+      height: 720px;
+      width: auto;
+      aspect-ratio: 16/9;
+      margin-left: auto;
+      margin-right: auto;
+      display: block;
+      overflow: hidden;
+      background: #000;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-color);
+    }
+
+    .stats-grid {
+      display: none !important;
+    }
+
+    .live-stats-overlay {
+      display: block !important;
+    }
+
+    .cam-info {
+      left: 16px !important;
+      right: auto !important;
+    }
+
+    .main-content {
+      padding-top: 16px !important;
+    }
+
+    .sec-header {
+      margin-bottom: 12px !important;
+    }
+
+    .fill-cover {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .overlay-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .icon-xl {
+      font-size: 36px;
+    }
+
+    .stat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .stat-label-row {
+      margin-bottom: 0px;
+    }
+
+    .stat-icon {
+      padding: 8px;
+      border-radius: var(--radius-md);
+    }
+
+    .stat-icon-primary {
+      color: var(--primary);
+      background: var(--primary-glow);
+    }
+
+    .stat-icon-success {
+      color: var(--success);
+      background: var(--success-glow);
+    }
+
+    .stat-icon-alert {
+      color: var(--alert);
+      background: var(--alert-glow);
+    }
+
+    .stat-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .stat-trend-label {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .mt-8 {
+      margin-top: 8px;
+    }
+
+    .mt-32 {
+      margin-top: 32px;
+    }
+
+    .mt-12 {
+      margin-top: 12px;
+    }
+
+    .link-action {
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .state-centered {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .icon-state {
+      font-size: 48px;
+      color: var(--text-muted);
+      display: block;
+    }
+
+    .text-sm-muted {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
+    .hidden {
+      display: none;
+    }
 
     /* Stage 1: Reading Animation */
     @keyframes reading-pulse {
-      0% { opacity: 0.6; transform: scale(0.98); }
-      50% { opacity: 1; transform: scale(1.02); }
-      100% { opacity: 0.6; transform: scale(0.98); }
+      0% {
+        opacity: 0.6;
+        transform: scale(0.98);
+      }
+
+      50% {
+        opacity: 1;
+        transform: scale(1.02);
+      }
+
+      100% {
+        opacity: 0.6;
+        transform: scale(0.98);
+      }
     }
 
     .badge-detecting {
@@ -152,9 +282,20 @@
       text-transform: uppercase;
     }
 
-    .sev-high { background: #ef4444; color: white; }
-    .sev-medium { background: #f59e0b; color: white; }
-    .sev-low { background: #3b82f6; color: white; }
+    .sev-high {
+      background: #ef4444;
+      color: white;
+    }
+
+    .sev-medium {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .sev-low {
+      background: #3b82f6;
+      color: white;
+    }
 
     .violation-list {
       list-style: none;
@@ -184,7 +325,7 @@
       display: flex;
       justify-content: space-between;
     }
-    
+
     /* Alert Banner */
     #alertBanner {
       position: absolute;
@@ -307,12 +448,10 @@
         <!-- Video Feed Viewer -->
         <div class="frame-viewer monitoring-viewer" id="monitorViewer" data-glare="false">
           <!-- Video element for webcam -->
-          <video id="webcamVideo" autoplay muted
-            class="fill-cover hidden"></video>
+          <video id="webcamVideo" autoplay muted class="fill-cover hidden"></video>
 
           <!-- Static image fallback -->
-          <img id="staticImage" src="assets/images/camera-offline.svg" alt="Camera Offline"
-            class="fill-cover" />
+          <img id="staticImage" src="assets/images/camera-offline.svg" alt="Camera Offline" class="fill-cover" />
 
           <!-- Canvas Overlay for Dynamic Bounding Boxes -->
           <canvas id="bboxCanvas" class="overlay-canvas"></canvas>
@@ -353,7 +492,7 @@
             <span class="material-symbols-outlined">warning</span>
             <span id="alertContent">Illegal Vehicle Detected – TN10AB1234</span>
           </div>
-          
+
           <!-- Violation Cards Container -->
           <div id="violationCards"></div>
         </div>
@@ -529,8 +668,8 @@
       let legalCount = 0;
       let illegalCount = 0;
       let recentDetections = [];
-      let detectionHistory = {}; 
-      let nextTrackId = 0;       
+      let detectionHistory = {};
+      let nextTrackId = 0;
       let loggedTracks = new Set(); // Track which tracking IDs have been added to the UI log
 
       // Load camera info and update display
@@ -664,11 +803,18 @@
       }
 
       window.addEventListener('resize', resizeCanvas);
-      window.addEventListener('load', () => {
+      // Fix: Ensure load handler runs even if page is already loaded (e.g. from cache or hard refresh)
+      function onPageReady() {
         resizeCanvas();
-        // Load existing detection count from localStorage
+        // Load existing detection count from database
         loadExistingDetectionCount();
-      });
+      }
+
+      if (document.readyState === 'complete') {
+        onPageReady();
+      } else {
+        window.addEventListener('load', onPageReady);
+      }
 
       // ---- Load Existing Detection Count ----
       async function loadExistingDetectionCount() {
@@ -696,11 +842,15 @@
               }
 
               // Add to recent detections (with timestamp)
+              const timestampStr = det.timestamp ? det.timestamp.replace(' ', 'T') : null;
+              const dateObj = timestampStr ? new Date(timestampStr) : null;
+              const isValidDate = dateObj && !isNaN(dateObj.getTime());
+
               recentDetections.push({
                 detected_plate: det.detected_plate,
                 violation: det.violation,
                 confidence: det.confidence,
-                time: det.timestamp ? new Date(det.timestamp).toLocaleTimeString('en-US', { hour12: false }) : 'N/A'
+                time: isValidDate ? dateObj.toLocaleTimeString('en-US', { hour12: false }) : (det.timestamp || 'N/A')
               });
             }
           });
@@ -735,7 +885,7 @@
             console.log('Camera access granted, stream:', webcamStream);
 
             webcamVideo.srcObject = webcamStream;
-            
+
             // Explicitly play to ensure it starts (required by some browsers)
             try {
               await webcamVideo.play();
@@ -746,7 +896,7 @@
 
             webcamVideo.classList.remove('hidden');
             staticImage.classList.add('hidden');
-            
+
             isWebcamActive = true;
             toggleWebcamBtn.textContent = 'videocam_off';
             toggleWebcamBtn.classList.add('active'); // UX feedback
@@ -757,7 +907,7 @@
               console.log('Video metadata loaded:', webcamVideo.videoWidth, 'x', webcamVideo.videoHeight);
               resizeCanvas();
             };
-            
+
             // Re-resize when video actually starts playing to be safe
             webcamVideo.oncanplay = () => {
               console.log('Video can play, resizing canvas...');
@@ -880,9 +1030,9 @@
         // Apply active filter
         let filtered = recentDetections;
         if (activeLogFilter === 'legal') {
-           filtered = recentDetections.filter(d => !d.violation);
+          filtered = recentDetections.filter(d => !d.violation);
         } else if (activeLogFilter === 'illegal') {
-           filtered = recentDetections.filter(d => !!d.violation);
+          filtered = recentDetections.filter(d => !!d.violation);
         }
 
         // Show last 10 detections
@@ -891,7 +1041,7 @@
           const badgeClass = det.violation ? 'alert' : 'success';
           const statusText = det.violation ? `VIOLATION: ${det.violation}` : 'LEGAL';
           const confidence = Math.round(det.confidence * 100);
-          
+
           // Use corrected plate for display if available
           const displayPlate = det.correct_plate || det.detected_plate;
           const originalPlate = det.correct_plate ? `<br/><small style="opacity:0.5">Read: ${det.detected_plate}</small>` : '';
@@ -944,8 +1094,8 @@
           // Capture frame from video - resize for faster processing
           const tempCanvas = document.createElement('canvas');
           // Increase resolution to fix physical scale detection limits
-          const targetWidth = 640;
-          const targetHeight = 480;
+          const targetWidth = 1280;
+          const targetHeight = 720;
           tempCanvas.width = targetWidth;
           tempCanvas.height = targetHeight;
           const tempCtx = tempCanvas.getContext('2d');
@@ -1245,7 +1395,7 @@
 
         content.textContent = `⚠️ Illegal Vehicle Detected – ${plate}`;
         banner.classList.add('active');
-        
+
         // Play sound if not already playing
         alertSound.play().catch(e => console.log('Audio play blocked'));
 
@@ -1259,10 +1409,10 @@
         const w = canvas.width;
         const h = canvas.height;
         const container = document.getElementById('violationCards');
-        
+
         // Clear the canvas
         ctx.clearRect(0, 0, w, h);
-        
+
         // Manage violation cards - only rebuild if needed
         const activeTracks = new Set(detections.map(d => d.trackId || d.detected_plate));
         Array.from(container.children).forEach(card => {
@@ -1302,7 +1452,10 @@
           ctx.stroke();
 
           // Label background
-          const label = isDetecting ? 'Reading Plate…' : (det.detected_plate || 'Unknown');
+          const plateText = det.detected_plate || 'Unknown';
+          const vehicleText = det.vehicle_label && det.vehicle_label !== "Unknown" ? ` [${det.vehicle_label}]` : (det.parent_vehicle && det.parent_vehicle !== "Unknown" ? ` [${det.parent_vehicle}]` : "");
+          const plateType = det.plate_type && det.plate_type !== "Unknown" ? ` [${det.plate_type}]` : "";
+          const label = isDetecting ? 'Reading Plate…' : `${plateText}${plateType} | ${isViolation ? 'ILLEGAL' : 'LEGAL'}${vehicleText}`;
           const status = isDetecting ? 'DETECTING' : (isViolation ? `ILLEGAL` : 'LEGAL');
 
           ctx.font = 'bold 13px Inter, sans-serif';
@@ -1311,7 +1464,7 @@
           const statusMetrics = ctx.measureText(status);
           const labelW = Math.max(textMetrics.width, statusMetrics.width) + 20;
           const labelH = 40;
-          
+
           // Position label above the box
           const labelX = x;
           const labelY = y - labelH - 6;
@@ -1352,13 +1505,13 @@
               container.appendChild(card);
               isNewCard = true;
             }
-            
+
             // Dynamic Internal HTML (updates on every frame to catch verdict transitions)
             const v = det.vehicle_info;
             const violations = (det.violations && det.violations.length > 0) ? det.violations : (v.violations || [det.violation || "Illegal Plate Format"]);
             const severity = (v.severity || "MEDIUM").toLowerCase();
             const date = v.last_recorded || new Date().toISOString().split('T')[0];
-            
+
             card.innerHTML = `
               <div class="violation-header">
                 <span class="violation-plate">${isDetecting ? 'Detecting...' : det.detected_plate}</span>
@@ -1374,25 +1527,33 @@
                      <span class="violation-timestamp">Last: ${date}</span>
                   </div>
                 `).join('')}
+                <div class="violation-item violation-item-stack" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                   <div class="violation-item-row">
+                     <span class="violation-text" style="color: #60a5fa">Type: ${det.plate_type || 'Unknown'}</span>
+                   </div>
+                   <div class="violation-item-row" style="margin-top: 4px;">
+                     <span class="violation-text" style="color: ${det.hsrp_status === 'HSRP' ? '#4ade80' : '#f87171'}">HSRP: ${det.hsrp_status || 'Unknown'}</span>
+                   </div>
+                </div>
               </div>
               <div class="violation-footer">
                 <span>${violations.length} Violation(s) Found</span>
               </div>
             `;
-            
+
             if (isNewCard) {
               setTimeout(() => card.classList.add('visible'), 50);
             }
-            
+
             // Position card below or beside the box
             // We use client coordinates for the transition-safe DOM overlay
             const rect = viewer.getBoundingClientRect();
             const scaleX = rect.width / w;
             const scaleY = rect.height / h;
-            
+
             const cardTop = (y + bh + 10) * scaleY;
             const cardLeft = x * scaleX;
-            
+
             card.style.top = `${cardTop}px`;
             card.style.left = `${cardLeft}px`;
           }

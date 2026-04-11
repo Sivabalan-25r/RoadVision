@@ -28,7 +28,7 @@ import os
 import sys
 import json
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Union
 
 # Ensure current directory is in path for local imports
 _root = os.path.dirname(os.path.abspath(__file__))
@@ -38,7 +38,7 @@ if _root not in sys.path:
 try:
     import cv2      # type: ignore
     import numpy as np  # type: ignore
-    from fastapi import FastAPI, File, UploadFile, HTTPException, Form # type: ignore
+    from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Path, Request # type: ignore
     from fastapi.middleware.cors import CORSMiddleware # type: ignore
     from fastapi.responses import JSONResponse # type: ignore
     from fastapi.staticfiles import StaticFiles # type: ignore
@@ -48,14 +48,18 @@ except ImportError:
     pass
 
 from processing.video_processor import process_video, save_upload_to_temp
-from recognition.plate_reader import read_plate, get_read_confidence, load_plate_model, detect_plates
+from recognition.plate_reader import (
+    read_plate, get_last_ocr_violation, update_tracker_ocr, 
+    vote_stabilized_plate, load_plate_model, detect_plates
+)
 from rules.plate_rules import validate_plate, PLATE_PATTERN
 import database as db
 from scoring.confidence_scorer import calculate_confidence
-from stabilization.plate_stabilizer import PlateStabilizer
 from deduplication.levenshtein import levenshtein_distance
 from deduplication.plate_deduplicator import deduplicate_detections
 from rules.parser.pretty_printer import format_plate
+from stabilization.plate_stabilizer import PlateStabilizer
+from collections import deque
 
 
 # ---- Helper Functions ----
@@ -208,14 +212,27 @@ async def analyze_video(video: UploadFile = File(...)):
                 logger.debug(f"Detection {idx}: OCR failed or returned empty")
                 continue
 
-            # Use regex for normalization since normalize_plate was removed from rules.plate_rules
+            # Use regex for normalization
             normalized = re.sub(r'[\s\-]+', '', plate_text).upper()
-            if len(normalized) < 6:
+            
+            # --- Apply stabilization ---
+            track_id = det.get('track_id')
+            if track_id:
+                plate_text, ocr_conf = update_tracker_ocr(track_id, plate_text, ocr_conf)
+                normalized = re.sub(r'[\s\-]+', '', plate_text).upper()
+
+            if len(normalized) < 3: # Reduced from 6
                 logger.debug(f"Detection {idx}: Plate too short after normalization: '{normalized}'")
                 continue
 
             # Validate against Indian RTO rules
-            validation = validate_plate(plate_text, det.get('raw_crop'))
+            classification = {
+                "plate_type": det.get("plate_type"),
+                "color": det.get("plate_color"),
+                "text_color": det.get("text_color"),
+                "hsrp_status": det.get("hsrp_status")
+            }
+            validation = validate_plate(plate_text, det.get('raw_crop'), classification=classification)
 
             logger.info(
                 f"Detection {idx}: '{validation.detected_plate}' → "
@@ -258,9 +275,11 @@ async def analyze_video(video: UploadFile = File(...)):
                 "ocr_conf": ocr_conf,
                 "confidence_modifier": validation.confidence_modifier,
                 "frame": det['frame_number'],
-                "bbox": det['bbox'],  # [x, y, width, height]
                 "plate_image": plate_image_b64,  # base64 JPEG crop for evidence
                 "source": "video_analysis",
+                "plate_type": validation.plate_type,
+                "plate_color": validation.plate_color,
+                "hsrp_status": validation.hsrp_status,
             }
             
             # Add vehicle registration info if available
@@ -451,24 +470,46 @@ async def get_camera_stats(camera_id: str):
 
 class Detection(BaseModel):
     detected_plate: str
-    correct_plate: str = ""
+    correct_plate: Optional[str] = ""
     violation: Optional[str] = None
-    violations: List[str] = []
-    confidence: float
-    yolo_conf: float = 0.0
-    ocr_conf: float = 0.0
-    confidence_modifier: float = 1.0
-    frame: int = 0
-    frames_seen: int = 1
-    bbox: list = []
-    plate_image: str = ""
-    source: str = "live_monitoring"
-    vehicle_info: dict = {}
+    violations: Optional[list] = []
+    confidence: Optional[float] = 0.0
+    yolo_conf: Optional[float] = 0.0
+    ocr_conf: Optional[float] = 0.0
+    confidence_modifier: Optional[float] = 1.0
+    frame: Optional[int] = 0
+    frames_seen: Optional[int] = 1
+    bbox: Optional[list] = []
+    plate_image: Optional[str] = ""
+    source: Optional[str] = "live_monitoring"
+    vehicle_info: Optional[dict] = {}
+    parent_vehicle: Optional[str] = "Unknown"
+    vehicle_type: Optional[str] = None
+    vehicle_label: Optional[str] = None
+    track_id: Optional[Union[int, str]] = None
+    status: Optional[str] = None
+    timestamp: Optional[str] = None
+
+    class Config:
+        extra = "ignore"
 
 
 @app.post("/api/detections/{camera_id}")
-async def add_detection(camera_id: str, detection: Detection):
-    """Add a new detection"""
+async def add_detection(
+    request: Request,
+    camera_id: str = Path(..., regex="^[a-zA-Z0-9_-]+$")
+):
+    """Add a new detection with raw body tracking"""
+    raw_body = await request.body()
+    try:
+        data_str = raw_body.decode('utf-8')
+        logger.debug(f"Raw detection payload: {data_str}")
+        data = json.loads(data_str)
+        detection = Detection(**data)
+    except Exception as e:
+        logger.error(f"Detection schema validation failed: {e}")
+        raise HTTPException(status_code=422, detail=f"Validation failed: {e}")
+
     try:
         camera = db.get_camera(camera_id)
         if not camera:
@@ -494,6 +535,39 @@ async def clear_detections(camera_id: str):
 
 
 # ---- Live Camera Stream Processing ----
+from collections import deque
+
+detection_buffer = {}  # camera_id -> deque of recent detections
+PERSISTENCE_FRAMES = 3
+
+def apply_detection_persistence(cam_id: str, current_detections: list):
+    if cam_id not in detection_buffer:
+        detection_buffer[cam_id] = deque(maxlen=PERSISTENCE_FRAMES)
+        
+    buffer = detection_buffer[cam_id]
+    
+    if len(current_detections) > 0:
+        buffer.append({
+            "detections": current_detections,
+            "timestamp": time.time(),
+            "missed_frames": 0
+        })
+        return current_detections
+
+    if len(buffer) > 0:
+        last = buffer[-1]
+        age_frames = last.get("missed_frames", 0) + 1
+        
+        if age_frames <= PERSISTENCE_FRAMES:
+            last["missed_frames"] = age_frames
+            logger.debug(
+                f"[{cam_id}] YOLO missed frame — "
+                f"using buffered detection (miss #{age_frames}/{PERSISTENCE_FRAMES})"
+            )
+            return last["detections"]
+            
+    return []
+
 @app.post("/api/process-frame")
 async def process_camera_frame(
     file: UploadFile = File(...),
@@ -547,8 +621,15 @@ async def process_camera_frame(
             logger.info(f"Scaling factors: x={scale_x:.3f}, y={scale_y:.3f}")
         
         # Run YOLO detection
-        detections = detect_plates(frame, frame_number=0)
-        logger.info(f"YOLO detected {len(detections)} plates")
+        raw_detections = detect_plates(frame, frame_number=0)
+        
+        safe_cam_id = camera_id if camera_id else "CAM-001"
+        detections = apply_detection_persistence(safe_cam_id, raw_detections)
+        
+        if len(detections) == 0:
+            logger.info("YOLO detected 0 plates")
+        else:
+            logger.info(f"YOLO detected {len(detections)} plates")
         
         # Convert detections to percentage-based bounding boxes
         results = []
@@ -584,9 +665,37 @@ async def process_camera_frame(
             # Try to read the plate text
             plate_text, ocr_conf = read_plate(det['raw_crop'], det['crop'])
             
+            # Check if OCR detected a decorated plate violation
+            ocr_violation = get_last_ocr_violation()
+            
             if plate_text:
+                # --- Apply stabilization ---
+                track_id = det.get('track_id')
+                if track_id:
+                    plate_text, ocr_conf = update_tracker_ocr(track_id, plate_text, ocr_conf)
+                    
+                    voted_text = vote_stabilized_plate(str(track_id), plate_text, ocr_conf)
+                    if voted_text:
+                        plate_text = voted_text
+
+
                 # Validate the plate using unified grammar_validator
-                validation = validate_plate(plate_text, det['raw_crop'])
+                classification = {
+                    "plate_type": det.get("plate_type"),
+                    "color": det.get("plate_color"),
+                    "text_color": det.get("text_color"),
+                    "hsrp_status": det.get("hsrp_status")
+                }
+                validation = validate_plate(plate_text, det['raw_crop'], classification=classification)
+                
+                # Override with decorated plate violation if detected
+                if ocr_violation and ocr_violation.get("violation") == "RTO_FORMAT_VIOLATION":
+                    logger.info(f"Plate '{plate_text}' flagged ILLEGAL — {ocr_violation.get('violation_detail', 'RTO format violation')}")
+                    if not validation.violation:
+                        validation.violation = "RTO_FORMAT_VIOLATION"
+                    if not validation.violations:
+                        validation.violations = []
+                    validation.violations.append(ocr_violation.get('violation_detail', 'Decorative/Fancy Text Detected'))
                 
                 logger.info(f"Plate {idx}: '{validation.detected_plate}' - {validation.violation or 'LEGAL'}")
                 
@@ -607,8 +716,14 @@ async def process_camera_frame(
                     ],
                     "plate_image": plate_image_data_url,
                     "vehicle_info": validation.vehicle_info,
+                    "parent_vehicle": det.get("parent_vehicle", "Unknown"),
+                    "vehicle_type": det.get("vehicle_type", "Unknown"),
+                    "vehicle_label": det.get("vehicle_label", "Unknown"),
                     "violations": validation.violations,
-                    "track_id": det.get("track_id")
+                    "track_id": det.get("track_id"),
+                    "plate_type": validation.plate_type,
+                    "plate_color": validation.plate_color,
+                    "hsrp_status": validation.hsrp_status
                 }
                 
                 # Calculate confidence using new module

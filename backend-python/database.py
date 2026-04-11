@@ -120,6 +120,10 @@ def _migrate_detections_table(cursor):
         ("vehicle_state",       "TEXT"),
         ("vehicle_model",       "TEXT"),
         ("violations",          "TEXT"),
+        ("parent_vehicle",      "TEXT DEFAULT 'Unknown'"),
+        ("plate_type",          "TEXT"),
+        ("plate_color",         "TEXT"),
+        ("hsrp_status",         "TEXT"),
     ]
 
     for col, col_type in migrations:
@@ -233,8 +237,9 @@ def add_detection(camera_id: str, detection: Dict):
         (camera_id, track_id, detected_plate, correct_plate, violation, violations, font_anomaly,
          confidence, yolo_conf, ocr_conf, confidence_modifier, frame, frames_seen,
          bbox, plate_image, source, vehicle_registered, vehicle_info,
-         vehicle_owner, vehicle_type, vehicle_state, vehicle_model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         vehicle_owner, vehicle_type, vehicle_state, vehicle_model, parent_vehicle,
+         plate_type, plate_color, hsrp_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         camera_id,
         detection.get("track_id"),
@@ -258,6 +263,10 @@ def add_detection(camera_id: str, detection: Dict):
         vehicle_info.get("vehicle_type"),
         vehicle_info.get("state"),
         vehicle_info.get("model"),
+        detection.get("parent_vehicle", "Unknown"),
+        detection.get("plate_type"),
+        detection.get("plate_color"),
+        detection.get("hsrp_status"),
     ))
     
     conn.commit()
@@ -323,6 +332,17 @@ def get_detections(camera_id: str, limit: int = 100, violations_only: bool = Fal
     
     conn.close()
     return detections
+
+
+def get_plate_sighting_count(plate_number: str) -> int:
+    """Get total sightings for a specific plate across all cameras."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as count FROM detections WHERE detected_plate = ? OR correct_plate = ?", (plate_number, plate_number))
+    row = cursor.fetchone()
+    count = row["count"] if row else 0
+    conn.close()
+    return int(count)
 
 
 def get_detection_stats(camera_id: str) -> Dict:

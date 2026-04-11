@@ -4,6 +4,7 @@ Implements NumPy-based Kalman filtering for bounding box stabilization
 and missing frame prediction to reduce YOLO inference calls.
 """
 import numpy as np
+from typing import Tuple, Optional, List, Dict
 
 class KalmanPlateTracker:
     def __init__(self, track_id: int):
@@ -36,6 +37,40 @@ class KalmanPlateTracker:
         
         self.is_initialized = False
         self.frames_since_update = 0
+        
+        # OCR Stabilization Buffer
+        self.text_buffer = []  # List of (text, confidence) tuples
+        self.buffer_window = 10  # Accumulate up to 10 frames of reads
+
+    def add_ocr_read(self, text: str, confidence: float):
+        """Add a new OCR read to the stabilization buffer."""
+        if text and len(text) >= 3:
+            self.text_buffer.append((text.upper(), float(confidence)))
+            if len(self.text_buffer) > self.buffer_window:
+                self.text_buffer.pop(0)
+
+    def get_stabilized_text(self) -> Tuple[Optional[str], float]:
+        """Vote on the best text from the stabilization buffer."""
+        if not self.text_buffer:
+            return None, 0.0
+            
+        from collections import Counter
+        texts = [r[0] for r in self.text_buffer]
+        if not texts:
+            return None, 0.0
+            
+        # Get most common read
+        best_text, count = Counter(texts).most_common(1)[0]
+        
+        # Calculate moving average confidence for this specific text
+        matching_confs = [r[1] for r in self.text_buffer if r[0] == best_text]
+        avg_conf = sum(matching_confs) / len(matching_confs)
+        
+        # Boost confidence if seen multiple times (Req. 7.10)
+        stability_boost = min(0.20, (count - 1) * 0.05)
+        final_conf = min(0.99, avg_conf + stability_boost)
+        
+        return best_text, final_conf
 
     def predict(self) -> np.ndarray:
         """Predict the next state."""

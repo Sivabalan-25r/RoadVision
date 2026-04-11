@@ -119,6 +119,7 @@
                 <tr>
                   <th>Plate ID</th>
                   <th>Plate Image</th>
+                  <th>Corrected Plate</th>
                   <th>Status</th>
                   <th>Confidence</th>
                   <th>Time / Frame</th>
@@ -133,10 +134,10 @@
         </div>
         <!-- Pagination -->
         <div class="pagination">
-          <span class="info"></span>
-          <div class="page-btns" id="paginationControls">
-            <!-- Buttons injected by components/pagination.js -->
+          <div class="pagination-info" id="pagination-info">
+            Showing 0 to 0 of 0 entries
           </div>
+          <div class="pagination-controls" id="pagination-controls"></div>
         </div>
       </div>
     </div>
@@ -185,12 +186,14 @@
           const confidence = Math.round(det.confidence * 100);
           const vList = (det.violations && det.violations.length > 0) ? det.violations : (det.violation ? [det.violation] : []);
           const badgeClass = vList.length > 0 ? 'alert' : 'success';
-          const statusText = vList.length > 0 ? `ILLEGAL: ${vList.join(', ')}` : 'LEGAL';
           const timeStr = det.timestamp ? new Date(det.timestamp).toLocaleTimeString('en-US', { hour12: false }) : `Frame ${det.frame}`;
           
-          // Thumbnail logic
-          const thumbnailHtml = det.plate_image 
-            ? `<div class="plate-thumbnail"><img src="data:image/jpeg;base64,${det.plate_image}" alt="Plate" /></div>`
+          // Thumbnail logic - fixed double prefixing
+          const hasPrefix = det.plate_image && det.plate_image.startsWith('data:image');
+          const imgSrc = hasPrefix ? det.plate_image : (det.plate_image ? `data:image/jpeg;base64,${det.plate_image}` : '');
+          
+          const thumbnailHtml = imgSrc 
+            ? `<div class="plate-thumbnail"><img src="${imgSrc}" alt="Plate" /></div>`
             : `<div class="plate-thumbnail-placeholder">No Image</div>`;
 
           const correctedDisplay = det.correct_plate ? 
@@ -204,6 +207,7 @@
           return `
             <tr>
               <td><span class="plate-number">${det.detected_plate}</span>${fontBadge}</td>
+              <td>${thumbnailHtml}</td>
               <td>${correctedDisplay}</td>
               <td>
                 <div style="display:flex; flex-direction:column; gap:4px;">
@@ -216,7 +220,7 @@
               <td style="color:var(--success); font-weight:600;">${confidence}%</td>
               <td style="color:var(--text-muted); font-size:12px;">${timeStr}</td>
               <td style="text-align:right">
-                <button class="icon-btn" onclick="viewDetails('${det.detected_plate}', '${det.correct_plate || ''}', '${vList.join(', ')}', ${confidence}, ${JSON.stringify(det.vehicle_info || {}).replace(/"/g, '&quot;')}, '${det.plate_image || ''}')">
+                <button class="icon-btn" onclick="viewIncidentDetails(${index})">
                   <span class="material-symbols-outlined">visibility</span>
                 </button>
               </td>
@@ -226,10 +230,16 @@
 
         // Show table, hide loading
         loadingState.style.display = 'none';
+        historyTable.classList.remove('hidden');
         historyTable.style.display = 'block';
         document.getElementById('exportPdfBtn').style.display = 'inline-flex';
 
-        // Store detections globally for PDF export
+        // Refresh pagination for new rows
+        if (window.refreshPagination) {
+          window.refreshPagination();
+        }
+
+        // Store detections globally for PDF export and modal access
         window._historyDetections = detections;
 
       } catch (e) {
@@ -252,9 +262,21 @@
       if (e.target === evidenceModal) evidenceModal.classList.remove('active');
     });
 
-    function viewDetails(plate, corrected, violation, confidence, vehicleInfo, plateImage) {
+    function viewIncidentDetails(index) {
+      const det = window._historyDetections[index];
+      if (!det) return;
+
+      const plate = det.detected_plate;
+      const corrected = det.correct_plate || '';
+      const vList = (det.violations && det.violations.length > 0) ? det.violations : (det.violation ? [det.violation] : []);
+      const violation = vList.join(', ') || 'None';
+      const confidence = Math.round(det.confidence * 100);
+      
       // Use plate_image from database if available, otherwise try evidence store
-      let imgSrc = plateImage || '';
+      let imgSrc = det.plate_image || '';
+      if (imgSrc && !imgSrc.startsWith('data:image')) {
+        imgSrc = `data:image/jpeg;base64,${imgSrc}`;
+      }
       
       if (!imgSrc) {
         const evidence = getEvidenceByPlate(plate);

@@ -15,7 +15,7 @@ YOLO_MODEL_PATH = os.path.join(MODELS_DIR, 'yolov26-license-plate.pt')
 
 # YOLOv26 inference parameters
 YOLO_CONFIDENCE_THRESHOLD = 0.15  # Optimized for faster capture
-YOLO_IMAGE_SIZE = 640
+YOLO_IMAGE_SIZE = 1280
 YOLO_USE_HALF_PRECISION = True
 
 # Geometric filter thresholds
@@ -55,7 +55,7 @@ OCR_CORRECTIONS = {
 }
 
 # Text cleaning thresholds
-MIN_CLEANED_LENGTH = 5
+MIN_CLEANED_LENGTH = 3
 MAX_CLEANED_LENGTH = 12
 
 # ============================================================================
@@ -64,7 +64,7 @@ MAX_CLEANED_LENGTH = 12
 
 # Indian RTO plate format: AA NN AA NNNN
 PLATE_FORMAT_PATTERN = r"^[A-Z]{2}\d{2}[A-Z0-9]{2,8}$"
-MIN_PLATE_LENGTH = 6
+MIN_PLATE_LENGTH = 3
 MAX_PLATE_LENGTH = 12
 
 # Violation Logic

@@ -10,6 +10,7 @@ import re
 import logging
 from typing import Optional, Dict
 from registration_db import lookup_vehicle, is_registered_plate
+from rules.rule_engine import apply_business_rules
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +23,14 @@ logger = logging.getLogger(__name__)
 #   NNNN = Registration number (1-4 digits)
 # =============================================
 
-# Standard Indian plate regex (allows some variation in series/number length)
+# Standard Indian plate regex (allows both TN28AR7701 (double) and TN82Y8388 (single series))
 PLATE_PATTERN = re.compile(
-    r'^([A-Z]{2})'     # State code
-    r'(\d{2})'          # District code
-    r'([A-Z]{1,3})'    # Series letters
-    r'(\d{1,4})$'      # Registration number
+    r'^[A-Z]{2}\d{2}[A-Z]{1,3}\d{4}$'
 )
 
-# Strict Indian plate regex (exact format: AA NN AA NNNN)
+# Strict Indian plate regex (exact format)
 STRICT_PLATE_PATTERN = re.compile(
-    r'^[A-Z]{2}\d{2}[A-Z]{1,3}\d{1,4}$'
+    r'^[A-Z]{2}\d{2}[A-Z]{1,3}\d{4}$'
 )
 
 # ---- Context-aware character substitution maps ----
@@ -94,6 +92,12 @@ STATE_RTO_MAX_CODE = {
     'WB': 99, 'MP': 70, 'BR': 57, 'JH': 24, 'AS': 34, 'OR': 35,
 }
 
+# Indian Motor Vehicle Act Rules 50 & 51 Compliance Checks
+COMPLIANCE_RULES = {
+    "min_plate_width_px": 80,        # Reject crops too small to be real plates
+    "min_char_height_px": 15,        # Matches RTO 15mm minimum for <70CC bikes
+}
+
 
 class PlateValidationResult:
     """Result of plate format validation."""
@@ -139,6 +143,9 @@ class PlateValidationResult:
             "violation": self.violation,          # primary (legacy)
             "violations": self.violations,        # full list
             "font_anomaly": self.font_anomaly,
+            "plate_type": getattr(self, "plate_type", "Unknown"),
+            "plate_color": getattr(self, "plate_color", "unknown"),
+            "hsrp_status": getattr(self, "hsrp_status", "NON-HSRP")
         }
         if self.vehicle_info:
             result["vehicle_info"] = self.vehicle_info
@@ -555,23 +562,33 @@ def detect_font_anomaly(plate_crop) -> dict:
     }
 
 
-def validate_plate(raw_text: str, plate_crop=None) -> PlateValidationResult:
+def validate_plate(raw_text: str, plate_crop=None, classification: dict = None) -> PlateValidationResult:
     """
     Run ALL validation rules on a detected plate and accumulate every violation found.
 
     Unlike the old priority-based early-return approach, this function evaluates
     every check independently and returns ALL violations that apply.
     """
+    # Extract classification metadata at the very beginning
+    p_type = classification.get('plate_type', 'unknown') if classification else 'unknown'
+    p_color = classification.get('color', 'unknown') if classification else 'unknown'
+    hsrp = classification.get('hsrp_status', 'unknown') if classification else 'unknown'
+
     original_plate = raw_text.strip().upper()
     has_spacing = bool(re.search(r'[\s\-]', original_plate))
     cleaned = normalize_plate(raw_text)
 
-    if len(cleaned) < 6:
-        return PlateValidationResult(
+    # --- 0. Pre-validation Checks ---
+    if len(cleaned) < 8:
+        res = PlateValidationResult(
             detected_plate=cleaned,
-            violations=["Plate Pattern Mismatch"],
-            confidence_modifier=0.5,
+            violations=["Incomplete Plate Read — Too Short"],
+            confidence_modifier=0.4,
         )
+        res.plate_type = p_type
+        res.plate_color = p_color
+        res.hsrp_status = hsrp
+        return res
 
     corrected_plate, corrections = smart_normalize(cleaned)
     font_result = detect_font_anomaly(plate_crop) if plate_crop is not None else {"is_anomaly": False, "confidence": 0.0, "reason": ""}
@@ -607,10 +624,13 @@ def validate_plate(raw_text: str, plate_crop=None) -> PlateValidationResult:
         all_violations.append("Non-Standard Font")
         confidence_modifier = min(confidence_modifier, 0.85)
 
-    # 5. Plate Pattern Mismatch
-    if not PLATE_PATTERN.match(corrected_plate):
+    # 5. Plate Pattern Mismatch (Strict Pattern: AA NN AA NNNN)
+    # Most Indian private/commercial vehicles use 4-digit registration numbers.
+    # Enforcing this catches common OCR partial read errors.
+    strict_pattern = re.compile(r'^[A-Z]{2}\d{2}[A-Z]{1,3}\d{4}$')
+    if not strict_pattern.match(corrected_plate):
         all_violations.append("Plate Pattern Mismatch")
-        confidence_modifier = min(confidence_modifier, 0.8)
+        confidence_modifier = min(confidence_modifier, 0.7)
 
     # 6. Unregistered Vehicle
     vehicle_info = lookup_vehicle(corrected_plate)
@@ -628,7 +648,50 @@ def validate_plate(raw_text: str, plate_crop=None) -> PlateValidationResult:
         all_violations.append("Invalid State Code")
         confidence_modifier = min(confidence_modifier, 0.7)
 
-    return PlateValidationResult(
+    # 8. Business & RTO Rule Engine (New)
+    try:
+        from database import get_plate_sighting_count
+        sightings = get_plate_sighting_count(corrected_plate or cleaned)
+    except Exception:
+        sightings = 0
+
+    # Apply cross-validation rules from rule_engine.py
+    # Note: zone_type can be fetched from config or camera metadata; defaulting to 'residential'
+    biz_violations = apply_business_rules(classification, sightings=sightings, zone_type="residential")
+    all_violations.extend(biz_violations)
+    
+    # Adjust confidence if violations found
+    if biz_violations:
+        confidence_modifier = min(confidence_modifier, 0.85)
+        
+        # Add penalty note for HSRP if missing
+        if any("HSRP" in v for v in biz_violations) and vehicle_info:
+            if "violation_notes" not in vehicle_info: vehicle_info["violation_notes"] = []
+            vehicle_info["violation_notes"].append("₹5,000–₹10,000 penalty applicable")
+
+    # 8a. Physical Size Thresholds
+    if plate_crop is not None:
+        try:
+            ph, pw = plate_crop.shape[:2]
+            if pw < COMPLIANCE_RULES["min_plate_width_px"]:
+                all_violations.append("RTO_FORMAT_VIOLATION (Plate Width Below Threshold)")
+                confidence_modifier = min(confidence_modifier, 0.6)
+            
+            # Estimate character height (typically 65% of plate height)
+            char_h_est = ph * 0.65
+            if char_h_est < COMPLIANCE_RULES["min_char_height_px"]:
+                all_violations.append("RTO_FORMAT_VIOLATION (Character Height Non-Compliant)")
+                confidence_modifier = min(confidence_modifier, 0.6)
+        except Exception:
+            pass
+
+
+    # Diplomatic plates: Standard DB lookup usually fails
+    if p_type == "Diplomatic Vehicle":
+        if "Unregistered Vehicle" in all_violations:
+            all_violations.remove("Unregistered Vehicle")
+
+    res = PlateValidationResult(
         detected_plate=cleaned,
         correct_plate=corrected_plate if corrected_plate != cleaned else None,
         violations=all_violations if all_violations else None,
@@ -636,3 +699,7 @@ def validate_plate(raw_text: str, plate_crop=None) -> PlateValidationResult:
         vehicle_info=vehicle_info,
         font_anomaly=has_font_anomaly,
     )
+    res.plate_type = p_type
+    res.plate_color = p_color
+    res.hsrp_status = hsrp
+    return res
